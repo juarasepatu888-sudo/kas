@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 export default defineConfig({
-  base: '/kasjuarasepatu/', // ← Penting untuk GitHub Pages
+  base: process.env.VITE_BASE_PATH || './', // Default './' agar portabel ke repo baru / local dev
   resolve: {
     alias: {
       '@service-account': fs.existsSync(path.resolve(__dirname, 'src/config/service-account.json'))
