@@ -1,6 +1,7 @@
 import { formatRupiah } from '../store/store.js';
 import { renderHeader, bindHeaderEvents } from '../components/header.js';
 import { showToast } from '../components/toast.js';
+import { render7DaySalesWidget } from '../components/sales-stats-widget.js';
 import logoJuara from '../assets/logo-juara.png';
 
 export function renderDashboardPage(store, isAdmin = true) {
@@ -278,79 +279,10 @@ export function renderDashboardPage(store, isAdmin = true) {
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 items-start">
       <!-- Kolom Peringatan & Status Toko (Mobile urutan pertama, Desktop di kanan) -->
       <div class="lg:col-span-5 flex flex-col gap-2.5 order-1 lg:order-2">
-        <!-- 7-Day Sales Stats Card Summary (Vertical Layout) -->
+        <!-- 7-Day Sales Stats Interactive Bar Chart & Summary -->
         ${(() => {
           const salesStats = store.getSalesStatsByDays ? store.getSalesStatsByDays(7) : null;
-          if (!salesStats || salesStats.summary.totalRevenue === 0) return '';
-          
-          const { summary } = salesStats;
-          return `
-            <section class="glass-card glass-sheen relative overflow-hidden rounded-lg p-2.5">
-              <!-- Header -->
-              <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-1">
-                  <span class="material-symbols-outlined text-primary text-[16px]">monitoring</span>
-                  <span class="font-label-md text-[11px] font-bold text-on-surface">Penjualan 7 Hari</span>
-                </div>
-                <button type="button" data-nav="laporan" class="font-label-sm text-[9px] text-primary font-semibold hover:underline flex items-center gap-0.5">
-                  <span>Detail</span>
-                  <span class="material-symbols-outlined text-[12px]">arrow_forward</span>
-                </button>
-              </div>
-              
-              <!-- Vertical Layout -->
-              <div class="flex flex-col gap-1.5">
-                <!-- Total Revenue -->
-                <div class="bg-emerald-50/70 border border-emerald-200/40 rounded-lg p-1.5">
-                  <div class="flex items-center gap-1 mb-0.5">
-                    <span class="material-symbols-outlined text-emerald-600 text-[12px]">payments</span>
-                    <span class="font-label-sm text-[8px] text-emerald-800 font-bold uppercase tracking-wide">Total Omzet 7 Hari</span>
-                  </div>
-                  <div class="font-currency-item text-sm font-bold text-emerald-700 font-tabular leading-tight">${formatRupiah(summary.totalRevenue, '')}</div>
-                  <div class="flex items-center justify-between mt-0.5">
-                    <span class="font-label-sm text-[9px] text-emerald-600">${summary.totalShoes} sepatu</span>
-                    <span class="font-label-sm text-[9px] text-emerald-600">${summary.totalTransactions}x transaksi</span>
-                  </div>
-                </div>
-                
-                <!-- Average -->
-                <div class="bg-surface-container/60 rounded-lg p-1.5">
-                  <span class="font-label-sm text-[8px] text-on-surface-variant uppercase tracking-wide">Rata-rata per Hari</span>
-                  <div class="font-currency-item text-xs font-bold text-primary font-tabular leading-tight mt-0.5">${formatRupiah(summary.avgRevenue, '')}</div>
-                  <span class="font-label-sm text-[9px] text-on-surface-variant">${summary.avgShoes.toFixed(1)} sepatu/hari</span>
-                </div>
-
-                ${summary.bestDay.revenue > 0 ? `
-                  <!-- Best Day -->
-                  <div class="bg-emerald-50/70 border border-emerald-200/40 rounded-lg p-1.5">
-                    <div class="flex items-center gap-0.5 mb-0.5">
-                      <span class="material-symbols-outlined text-emerald-600 text-[11px]">trending_up</span>
-                      <span class="font-label-sm text-[8px] text-emerald-800 font-bold uppercase tracking-wide">Hari Terbaik</span>
-                    </div>
-                    <div class="flex items-baseline gap-1">
-                      <span class="font-title-ledger text-[11px] font-bold text-emerald-900">${summary.bestDay.dayName}</span>
-                      <span class="font-label-sm text-[9px] text-emerald-700">⭐</span>
-                    </div>
-                    <div class="font-currency-item text-xs font-bold text-emerald-700 font-tabular leading-tight">${formatRupiah(summary.bestDay.revenue, '')}</div>
-                    <span class="font-label-sm text-[9px] text-emerald-600">${summary.bestDay.shoeCount} sepatu terjual</span>
-                  </div>
-                ` : ''}
-                
-                ${summary.worstDay.revenue > 0 && summary.worstDay.revenue < summary.bestDay.revenue ? `
-                  <!-- Worst Day -->
-                  <div class="bg-amber-50/70 border border-amber-200/40 rounded-lg p-1.5">
-                    <div class="flex items-center gap-0.5 mb-0.5">
-                      <span class="material-symbols-outlined text-amber-600 text-[11px]">trending_down</span>
-                      <span class="font-label-sm text-[8px] text-amber-800 font-bold uppercase tracking-wide">Hari Tersepi</span>
-                    </div>
-                    <div class="font-title-ledger text-[11px] font-bold text-amber-900 leading-tight">${summary.worstDay.dayName}</div>
-                    <div class="font-currency-item text-xs font-bold text-amber-700 font-tabular leading-tight">${formatRupiah(summary.worstDay.revenue, '')}</div>
-                    <span class="font-label-sm text-[9px] text-amber-600">${summary.worstDay.shoeCount} sepatu terjual</span>
-                  </div>
-                ` : ''}
-              </div>
-            </section>
-          `;
+          return render7DaySalesWidget(salesStats, { isCompact: true, showBreakdown: false, showTitle: true });
         })()}
 
         <!-- Smart Alerts (Stok Kritis & Pengiriman Aktif) -->
@@ -606,6 +538,14 @@ export function initDashboardPage(router, store, isAdmin = true) {
   if (btnOpname) {
     btnOpname.addEventListener('click', () => router.navigate('stock-opname'));
   }
+
+  // Generic data-nav navigation buttons
+  document.querySelectorAll('[data-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-nav');
+      if (target) router.navigate(target);
+    });
+  });
 
   // Navigate to verification page
   const btnNavVerify = document.querySelectorAll('[data-nav-verify]');

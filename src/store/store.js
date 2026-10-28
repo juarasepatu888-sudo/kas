@@ -1559,24 +1559,48 @@ class Store {
    * Returns daily breakdown with date, revenue, shoe count, and transaction count
    * Excludes investor transactions (only actual sales)
    */
-  getSalesStatsByDays(days = 7) {
+  getSalesStatsByDays(days = 7, customRefDate = null) {
     const trxs = this.getTransactions();
-    const now = new Date();
+    let refDate = new Date();
+
+    if (customRefDate) {
+      const parsed = new Date(customRefDate);
+      if (!isNaN(parsed.getTime())) refDate = parsed;
+    } else {
+      const todayStr = getLocalDateString(new Date());
+      const pastDays = new Date();
+      pastDays.setDate(pastDays.getDate() - (days - 1));
+      const pastDaysStr = getLocalDateString(pastDays);
+
+      const hasRecentData = trxs.some(t => t.date && t.date >= pastDaysStr && t.date <= todayStr);
+      if (!hasRecentData && trxs.length > 0) {
+        let maxDate = null;
+        trxs.forEach(t => {
+          if (t.date && t.type === 'masuk') {
+            const d = new Date(t.date);
+            if (!isNaN(d.getTime())) {
+              if (!maxDate || d > maxDate) maxDate = d;
+            }
+          }
+        });
+        if (maxDate) refDate = maxDate;
+      }
+    }
+
     const stats = [];
 
     // Create array of dates for last N days
     for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now);
+      const date = new Date(refDate);
       date.setDate(date.getDate() - i);
       const dateStr = getLocalDateString(date);
 
-      // Filter sales transactions for this date (exclude investor)
+      // Filter sales transactions for this date (exclude investor & piutang)
       const dayTrxs = trxs.filter(t => {
         if (t.type !== 'masuk') return false;
         if (!t.date) return false;
-        // Exclude investor transactions
-        const isInvestor = t.category && t.category.toLowerCase().includes('investor');
-        if (isInvestor) return false;
+        const cat = (t.category || '').toLowerCase();
+        if (cat.includes('investor') || cat.includes('piutang')) return false;
         return t.date === dateStr;
       });
 
@@ -1588,8 +1612,16 @@ class Store {
         // Count shoes from items array or itemCount
         if (t.items && Array.isArray(t.items) && t.items.length > 0) {
           shoeCount += t.items.reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
+        } else if (t.itemCount && Number(t.itemCount) > 0) {
+          shoeCount += Number(t.itemCount);
         } else {
-          shoeCount += Number(t.itemCount) || 1;
+          const title = (t.title || '').toLowerCase();
+          const matchPasang = title.match(/(\d+)\s*(?:pasang|psg)/);
+          if (matchPasang) {
+            shoeCount += parseInt(matchPasang[1], 10);
+          } else {
+            shoeCount += 1;
+          }
         }
       });
 
@@ -1606,12 +1638,12 @@ class Store {
     const totalRevenue = stats.reduce((sum, d) => sum + d.revenue, 0);
     const totalShoes = stats.reduce((sum, d) => sum + d.shoeCount, 0);
     const totalTransactions = stats.reduce((sum, d) => sum + d.transactionCount, 0);
-    const avgRevenue = stats.length > 0 ? totalRevenue / stats.length : 0;
+    const avgRevenue = stats.length > 0 ? Math.round(totalRevenue / stats.length) : 0;
     const avgShoes = stats.length > 0 ? totalShoes / stats.length : 0;
 
     // Find best and worst day
-    const bestDay = stats.reduce((max, d) => d.revenue > max.revenue ? d : max, stats[0] || { revenue: 0 });
-    const worstDay = stats.reduce((min, d) => d.revenue < min.revenue && d.revenue > 0 ? d : min, stats[0] || { revenue: 0 });
+    const bestDay = stats.reduce((max, d) => d.revenue > max.revenue ? d : max, stats[0] || { revenue: 0, dayName: '-' });
+    const worstDay = stats.reduce((min, d) => d.revenue < min.revenue && d.revenue > 0 ? d : min, stats[0] || { revenue: 0, dayName: '-' });
 
     return {
       days: stats,
