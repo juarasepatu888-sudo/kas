@@ -9,7 +9,65 @@ Aplikasi buku kas digital untuk toko sepatu yang mengelola transaksi penjualan, 
 - **Storage:** LocalStorage (untuk data lokal & foto produk)
 - **Barcode Scanner:** `html5-qrcode`
 
-## Konteks Terakhir (Update 21 Oktober 2026)
+## Konteks Terakhir (Update 28 Oktober 2026)
+
+### Statistik Penjualan 7 Hari, Perbaikan Desktop, Barcode Scanner Modal & Migrasi Repositori
+**Waktu:** 21–28 Oktober 2026  
+**Tujuan:** (1) Memperbaiki layout desktop adaptif (max-width, penghapusan mode switcher), (2) Menambahkan barcode scanner di modal Tambah Barang pada halaman Transaksi List, (3) Memperbaiki label investor di Dashboard, (4) Membangun fitur Statistik Penjualan 7 Hari dengan grafik bar interaktif & KPI summary, (5) Mengekstrak widget statistik menjadi komponen reusable, (6) Migrasi PWA ke repositori baru.
+
+**Poin-Poin Perbaikan & Fitur Baru:**
+
+1. **Perbaikan Layout Desktop Adaptif (21 Okt 2026):**
+   - **Max-width dikurangi** dari `1080px` menjadi `680px` di `src/styles/app.css` agar layout mobile-first tidak bertumpuk di desktop.
+   - **Inline override `max-w-[430px]`** dihapus dari `index.html`, digantikan oleh CSS media query yang mengontrol lebar container secara responsif.
+   - **Mode Switcher dihapus** (`2a4f73a`): Desktop selalu menggunakan mode layar lebar tanpa toggle `Simulasi HP` / `Layar Lebar`. Simplifikasi di `index.html`, `src/main.js`, dan `src/styles/app.css`.
+   - **Commits:** `649854c`, `33041da`, `2a4f73a`
+
+2. **Barcode Scanner di Modal Tambah Barang Transaksi (21 Okt 2026):**
+   - Menambahkan tombol scan barcode di samping input barcode pada modal *"Tambah Barang ke Transaksi"* di `src/pages/transaksi-list.js`.
+   - Implementasi fullscreen barcode scanner modal khusus fitur tambah item dengan dukungan:
+     - Camera preview + scan frame overlay
+     - Kontrol torch/flash, zoom (1x–3x), switch kamera depan/belakang
+     - Auto-close setelah scan sukses, barcode otomatis terisi ke input
+     - Retry button saat error kamera
+   - Scanner dioptimasi untuk format barcode retail (CODE_128, EAN, UPC, dll.).
+   - **Fix close button** (`838f539`): Mengubah event listener dari `e.target.id` ke `e.target.closest()` agar klik di icon dalam button tetap menutup modal.
+   - **Commits:** `3f34302`, `838f539`
+
+3. **Fix Label Investor di Dashboard (25 Okt 2026):**
+   - Menghapus label *"penjualan sepatu"* dari kartu transaksi investor di dashboard (`src/pages/dashboard.js`).
+   - Transaksi investor kini menampilkan label kategori yang sesuai (Dana Investor, Bagi Hasil Investor, dll.).
+   - **Commit:** `388cb03`
+
+4. **Fitur Statistik Penjualan 7 Hari — Grafik Bar Interaktif & KPI (25–28 Okt 2026):**
+   - **Logika bisnis** (`src/store/store.js` — method `getSalesStatsByDays(days, customRefDate)`):
+     - Menghitung penjualan harian selama N hari terakhir (default 7) dengan breakdown: omset (revenue), jumlah sepatu laku (shoeCount), dan jumlah transaksi (transactionCount).
+     - Mengeksklusi transaksi investor (`category.includes('investor')`) dan piutang (`category.includes('piutang')`) dari perhitungan omset penjualan murni.
+     - **Auto-detect tanggal referensi:** Jika tidak ada transaksi di 7 hari terakhir (data historis), otomatis menggunakan tanggal transaksi masuk terakhir sebagai acuan sehingga grafik selalu menampilkan data yang relevan.
+     - Summary: totalRevenue, totalShoes, totalTransactions, avgRevenue, avgShoes, bestDay, worstDay.
+   - **Komponen reusable** (`src/components/sales-stats-widget.js` — `render7DaySalesWidget(stats, options)`):
+     - Widget mandiri yang dapat dipakai di Dashboard (mode compact) dan Laporan (mode full dengan breakdown tabel).
+     - **3 KPI Cards:** Total Omset (hijau emerald), Sepatu Terjual (kuning amber), Rata-rata/Hari + Hari Terbaik (biru).
+     - **Grafik Bar 7 Kolom Interaktif:** Tinggi bar proporsional terhadap hari puncak, tooltip hover/tap dengan detail hari, gradient bar (emerald→teal), indikator hari terbaik (bintang amber), label nominal kompak (jt/rb).
+     - **Tabel Rincian Harian** (opsional via `showBreakdown`): Daftar hari terbalik kronologis dengan tanggal Indonesia, pasang sepatu, jumlah transaksi, nominal omset, dan mini progress bar.
+     - Helper: `formatCompactRupiah()` (nominal ringkas 450rb / 1.2jt), `formatDateIndo()` (28 Okt 2026).
+   - **Dashboard** (`src/pages/dashboard.js`): Widget statistik 7 hari ditampilkan di kolom kanan (compact mode, tanpa breakdown) dengan tombol navigasi ke Laporan Lengkap.
+   - **Laporan** (`src/pages/laporan.js`): Widget statistik 7 hari ditampilkan full-size di atas seksi Sepatu Laku & Sisa Stok, lengkap dengan tabel rincian harian.
+   - **Evolusi desain iteratif:** Dari card inline di dashboard → layout 2 kolom → layout vertikal stack → ekstraksi ke komponen reusable terpisah.
+   - **Commits:** `c81cede`, `d079d3d`, `85c1e26`, `8993055`
+
+5. **Migrasi ke Repositori Baru & Adaptasi PWA (28 Okt 2026):**
+   - **Repositori baru:** `juarasepatu888-sudo/kas` (sebelumnya `duwikachek/kasjuarasepatu`).
+   - **Vite base path** (`vite.config.js`): Menggunakan `process.env.VITE_BASE_PATH || './'` agar portabel ke repo baru tanpa hardcode path.
+   - **PWA Manifest** (`public/manifest.json`): `start_url`, `scope`, dan `id` diubah ke relative path `./` agar tidak terikat nama repo.
+   - **GitHub Actions** (`.github/workflows/deploy.yml`): Build env menggunakan `VITE_BASE_PATH: '/${{ github.event.repository.name }}/'` untuk otomatis menyesuaikan base path.
+   - **Clear Cache** (`public/clear-cache.html`): Path service worker disesuaikan.
+   - **Pembersihan file backup** (`src/utils/barcode-scanner-config.js.bak`) dan penambahan `.env.example` baru.
+   - **Commits:** `87d7b79`, `a0679ba`
+
+---
+
+## Konteks Sebelumnya (Update 21 Oktober 2026)
 
 ### Refactoring, Keamanan PIN, Penyimpanan Browser & Perapian Repositori
 **Waktu:** 21 Oktober 2026  
@@ -312,17 +370,32 @@ Aplikasi buku kas digital untuk toko sepatu yang mengelola transaksi penjualan, 
       - Menghapus atribut `lineStyle: dashType` yang sebelumnya menyebabkan respons 400 Bad Request dari Google Sheets API, sehingga batch update grafik kini 100% sukses terpasang.
 
 ## File Kunci
-- `src/store/store.js`: Logika bisnis utama, perhitungan stok, dan sinkronisasi Supabase.
+- `src/store/store.js`: Logika bisnis utama, perhitungan stok, statistik penjualan (`getSalesStatsByDays`), dan sinkronisasi Supabase.
+- `src/components/sales-stats-widget.js`: Komponen reusable widget Statistik Penjualan 7 Hari (grafik bar interaktif + KPI + tabel breakdown).
+- `src/pages/dashboard.js`: Halaman utama dashboard dengan KPI, aksi cepat, widget statistik 7 hari, dan alert cerdas.
+- `src/pages/laporan.js`: Halaman laporan lengkap (filter periode/faktur, sepatu laku, sisa stok, statistik 7 hari).
+- `src/pages/transaksi-list.js`: Daftar transaksi dengan grouping faktur dan barcode scanner di modal tambah barang.
 - `src/pages/tambah-transaksi.js`: Logika input penjualan dan validasi barcode.
 - `src/pages/tambah-barang-masuk.js`: Logika input stok barang.
 - `src/utils/barcode-scanner-config.js`: Konfigurasi kamera, filter video, dan utility scanner.
 - `src/services/supabase.js`: Koneksi ke Supabase.
+- `vite.config.js`: Konfigurasi Vite dengan base path dinamis untuk portabilitas antar repositori.
+- `.github/workflows/deploy.yml`: CI/CD GitHub Pages dengan base path otomatis per repository.
 
 ## Informasi Supabase
 - **Project Ref:** `hsavfeawlfvqpacfjyhb`
 - **Sync Method:** State JSON disimpan di tabel `app_state`.
 
+## Informasi Repositori
+- **Repositori Aktif:** `juarasepatu888-sudo/kas` (GitHub Pages)
+- **Repositori Lama:** `duwikachek/kasjuarasepatu`
+- **Base Path:** Otomatis via `VITE_BASE_PATH` env variable (`/${{ github.event.repository.name }}/`)
+
 ## Catatan untuk Pengembang Selanjutnya
 - Selalu gunakan `enhanceVideoElement()` untuk konsistensi tampilan kamera.
 - Validasi stok dilakukan di dua tempat: `onSuccess` callback scanner dan `findSaleBarcodeConflict()` untuk input manual.
 - Foto produk disimpan di LocalStorage untuk menghindari limitasi ukuran di Supabase.
+- Widget statistik 7 hari (`render7DaySalesWidget`) menerima opsi `{ isCompact, showBreakdown, showTitle }` — gunakan mode compact di Dashboard, full mode di Laporan.
+- `getSalesStatsByDays()` secara otomatis mengeksklusi transaksi investor & piutang dari perhitungan omset penjualan.
+- Mode Switcher desktop sudah dihapus — desktop selalu menggunakan mode layar lebar (`max-width: 680px`).
+- Jika memindahkan ke repo baru, cukup ubah `VITE_BASE_PATH` di GitHub Secrets dan pastikan `manifest.json` menggunakan relative path (`./`).
