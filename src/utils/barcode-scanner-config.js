@@ -106,31 +106,23 @@ export const SUPPORTED_FORMATS = [
  * bar/bar pada stiker label kardus.
  */
 export function getQrbox1D() {
-  // Ukur container bila sudah ter-render,fallback ke window
-  const readerEl = document.getElementById('qr-reader');
-  const containerW = readerEl && readerEl.clientWidth
-    ? readerEl.clientWidth
-    : window.innerWidth;
-  const containerH = readerEl && readerEl.clientHeight
-    ? readerEl.clientHeight
-    : window.innerHeight;
-
-  return {
-    // Sisakan margin kecil agar tidak menyentuh tepi container
-    width: Math.max(120, Math.min(460, Math.round(containerW * 0.92))),
-    height: Math.max(60, Math.min(150, Math.round(containerH * 0.42)))
+  return function(viewfinderWidth, viewfinderHeight) {
+    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+    return {
+      width: Math.max(120, Math.min(460, Math.floor(viewfinderWidth * 0.88))),
+      height: Math.max(50, Math.min(160, Math.floor(minEdge * 0.45)))
+    };
   };
 }
 
-/** Area pindai untuk QR Code / matrix (lebih tinggi,Opsional). */
+/** Area pindai untuk QR Code / matrix (lebih tinggi, Opsional). */
 export function getQrbox2D() {
-  const readerEl = document.getElementById('qr-reader');
-  const containerW = readerEl && readerEl.clientWidth ? readerEl.clientWidth : window.innerWidth;
-  const containerH = readerEl && readerEl.clientHeight ? readerEl.clientHeight : window.innerHeight;
-
-  return {
-    width: Math.max(140, Math.min(320, Math.round(containerW * 0.8))),
-    height: Math.max(140, Math.min(280, Math.round(containerH * 0.82)))
+  return function(viewfinderWidth, viewfinderHeight) {
+    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+    return {
+      width: Math.max(120, Math.min(300, Math.floor(minEdge * 0.75))),
+      height: Math.max(120, Math.min(300, Math.floor(minEdge * 0.75)))
+    };
   };
 }
 
