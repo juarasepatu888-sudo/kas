@@ -1000,9 +1000,71 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     showToast(`Barcode ${cleanText} terbaca!`, 'success');
   }
 
-  function openScanner() {
+  let isStartingScanner = false;
+
+  async function cleanupScanner() {
+    const oldScanner = html5Scanner;
+    html5Scanner = null;
+
+    if (oldScanner) {
+      try {
+        const isScanning = typeof oldScanner.isScanning === 'boolean'
+          ? oldScanner.isScanning
+          : (oldScanner.getState && oldScanner.getState() === 2);
+
+        if (isScanning) {
+          await oldScanner.stop().catch(() => {});
+        }
+      } catch (_) {}
+
+      try {
+        await oldScanner.clear().catch(() => {});
+      } catch (_) {}
+    }
+
+    // Pastikan seluruh stream track video kamera benar-benar dimatikan
+    try {
+      const video = document.querySelector('#qr-reader video');
+      if (video && video.srcObject) {
+        const stream = video.srcObject;
+        if (stream && typeof stream.getTracks === 'function') {
+          stream.getTracks().forEach((track) => {
+            try { track.stop(); } catch (_) {}
+          });
+        }
+        video.srcObject = null;
+      }
+    } catch (_) {}
+
+    // Bersihkan kontainer DOM #qr-reader secara total agar tidak ada video mati/bekas yang tersisa
+    const qrContainer = document.getElementById('qr-reader');
+    if (qrContainer) {
+      qrContainer.innerHTML = '';
+    }
+  }
+
+  async function openScanner() {
     if (!barcodeModal) return;
+    if (isStartingScanner) return;
+    isStartingScanner = true;
+
     barcodeModal.classList.remove('hidden');
+
+    // Tampilkan indikator memuat agar tidak ada layar blank hitam
+    const qrContainer = document.getElementById('qr-reader');
+    if (qrContainer) {
+      qrContainer.innerHTML = `
+        <div class="w-full h-full flex flex-col items-center justify-center gap-2.5 text-white/80 p-4">
+          <div class="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-xs font-semibold text-emerald-300">Menghubungkan ke kamera...</span>
+        </div>
+      `;
+    }
+
+    // Bersihkan scanner lama jika masih ada
+    await cleanupScanner();
+    // Beri jeda pengaman 180ms agar driver kamera di perangkat HP dilepaskan seutuhnya
+    await new Promise((res) => setTimeout(res, 180));
 
     // --- PRE-FLIGHT CHECK -------------------------------------------------
     // Kamera hanya boleh dibuka pada secure context (https / localhost).
@@ -1010,13 +1072,14 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     // jadi lebih baik informasikan penyebabnya sejak awal.
     const support = checkCameraSupport();
     if (!support.ok) {
+      isStartingScanner = false;
       setScannerStatus(support.reason, 'error');
       setScannerHint(support.hint);
       showRetryButton(true);
       return;
     }
 
-    setScannerStatus('Meminta izin kamera...', 'info');
+    setScannerStatus('Mengaktifkan kamera...', 'info');
     showRetryButton(false);
 
     isProcessingScan = false;
@@ -1060,6 +1123,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     // Helper: nyalakan video preview setelah kamera benar-benar jalan
     const afterStart = () => {
       scannerStartedOnce = true;
+      isStartingScanner = false;
       // Beri jeda agar <video> benar-benar ter-render sebelum di-style
       setTimeout(() => {
         enhanceVideoElement('qr-reader');
@@ -1075,12 +1139,8 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
      * Setiap percobaan memakai instance Html5Qrcode BARU karena
      * html5-qrcode tidak mengizinkan start() dua kali pada instance sama.
      */
-    const tryStart = (cameraConstraint, config, label) => {
-      // Buang instance sebelumnya bila ada
-      if (html5Scanner) {
-        try { html5Scanner.clear(); } catch (_) { /* abaikan */ }
-        html5Scanner = null;
-      }
+    const tryStart = async (cameraConstraint, config, label) => {
+      await cleanupScanner();
 
       const scanner = new Html5Qrcode('qr-reader', {
         verbose: false,
@@ -1090,10 +1150,9 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
 
       return scanner.start(cameraConstraint, config, onSuccess, onError)
         .then(() => { afterStart(); })
-        .catch((err) => {
+        .catch(async (err) => {
           console.warn(`[scanner] gagal start (${label}):`, err);
-          try { scanner.clear(); } catch (_) { /* abaikan */ }
-          if (html5Scanner === scanner) html5Scanner = null;
+          await cleanupScanner();
           throw err;
         });
     };
@@ -1111,6 +1170,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
       .catch(() => tryStart({ facingMode: 'user' }, { ...baseConfig, fps: 10 }, 'user fallback'))
       .catch((err) => {
         console.error('[scanner] kamera tidak dapat dibuka', err);
+        isStartingScanner = false;
         setScannerStatus(describeCameraError(err), 'error');
         showRetryButton(true);
       });
@@ -1198,63 +1258,22 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
   }
 
   /** Berganti kamera depan <-> belakang dengan instance scanner baru. */
-  function switchCamera() {
+  async function switchCamera() {
     useFrontCamera = !useFrontCamera;
-
-    // Stop scanner lama dengan rapi sebelum membuka ulang
-    const oldScanner = html5Scanner;
-    html5Scanner = null;
-    if (oldScanner) {
-      oldScanner.stop()
-        .then(() => { try { oldScanner.clear(); } catch (_) {} })
-        .catch(() => { try { oldScanner.clear(); } catch (_) {} })
-        .then(() => setTimeout(openScanner, 180));
-    } else {
-      setTimeout(openScanner, 180);
-    }
+    await cleanupScanner();
+    setTimeout(openScanner, 180);
   }
 
-  function closeScanner() {
+  async function closeScanner() {
     isProcessingScan = true;
     if (typeof scanDebouncer.lock === 'function') scanDebouncer.lock();
 
-    if (!barcodeModal) return;
-    barcodeModal.classList.add('hidden');
+    if (barcodeModal) {
+      barcodeModal.classList.add('hidden');
+    }
     applyTorch(false);
 
-    // Hentikan hardware track video seketika
-    try {
-      const video = document.querySelector('#qr-reader video');
-      if (video && video.srcObject) {
-        const stream = video.srcObject;
-        if (stream && typeof stream.getTracks === 'function') {
-          stream.getTracks().forEach((track) => {
-            try { track.stop(); } catch (_) {}
-          });
-        }
-        video.srcObject = null;
-      }
-    } catch (_) {}
-
-    const oldScanner = html5Scanner;
-    html5Scanner = null;
-    if (oldScanner) {
-      try {
-        const isScanning = typeof oldScanner.isScanning === 'boolean'
-          ? oldScanner.isScanning
-          : (oldScanner.getState && oldScanner.getState() === 2);
-
-        if (isScanning) {
-          oldScanner.stop()
-            .then(() => { try { oldScanner.clear(); } catch (_) {} })
-            .catch(() => { try { oldScanner.clear(); } catch (_) {} });
-        } else {
-          try { oldScanner.clear(); } catch (_) {}
-        }
-      } catch (_) {
-        try { oldScanner.clear(); } catch (_) {}
-      }
-    }
+    await cleanupScanner();
 
     activeScanItemId = null;
     scannerStartedOnce = false;
@@ -1263,6 +1282,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     setScannerStatus('Geser barcode ke dalam kotak sampai terkunci', 'info');
     const lastRead = document.getElementById('scanner-last-read');
     if (lastRead) lastRead.classList.add('hidden');
+    isStartingScanner = false;
   }
 
   if (btnCloseCamera) btnCloseCamera.addEventListener('click', closeScanner);
@@ -1277,18 +1297,9 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
 
   const btnRetry = document.getElementById('btn-scanner-retry');
   if (btnRetry) {
-    btnRetry.addEventListener('click', () => {
-      // Bersihkan scanner lama (bila ada) lalu coba lagi
-      const oldScanner = html5Scanner;
-      html5Scanner = null;
-      if (oldScanner) {
-        oldScanner.stop()
-          .then(() => { try { oldScanner.clear(); } catch (_) {} })
-          .catch(() => {})
-          .then(() => openScanner());
-      } else {
-        openScanner();
-      }
+    btnRetry.addEventListener('click', async () => {
+      await cleanupScanner();
+      openScanner();
     });
   }
 
