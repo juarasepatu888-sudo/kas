@@ -15,10 +15,11 @@ import {
 } from '../utils/barcode-scanner-config.js';
 
 function createNewItem(defaultValues = {}) {
-  const uniqueId = `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const uniqueId = defaultValues.id || `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   return {
     id: uniqueId,
     barcode: defaultValues.barcode !== undefined ? defaultValues.barcode : '',
+    originalBarcode: defaultValues.originalBarcode !== undefined ? defaultValues.originalBarcode : (defaultValues.barcode || ''),
     name: defaultValues.name || '',
     kondisi: defaultValues.kondisi || 'Bagus',
     catatanMinus: defaultValues.catatanMinus || '',
@@ -244,7 +245,14 @@ export function renderTambahBarangMasukPage(store, params = {}) {
 
   let initialItems = [];
   if (isEdit && targetSupply && targetSupply.items && targetSupply.items.length > 0) {
-    initialItems = targetSupply.items.map((it) => createNewItem(it));
+    initialItems = targetSupply.items.map((it, idx) => {
+      const stableId = it.id || `supply-item-${targetSupply.id}-${idx}`;
+      return createNewItem({
+        ...it,
+        id: stableId,
+        originalBarcode: it.barcode || ''
+      });
+    });
   } else {
     // Mode baru atau mode append: siapkan 1 kartu sepatu kosong baru
     initialItems = [createNewItem({
@@ -550,7 +558,14 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
   // Initial Items State
   let items = [];
   if (isEdit && targetSupply && targetSupply.items && targetSupply.items.length > 0) {
-    items = targetSupply.items.map((it) => createNewItem(it));
+    items = targetSupply.items.map((it, idx) => {
+      const stableId = it.id || `supply-item-${targetSupply.id}-${idx}`;
+      return createNewItem({
+        ...it,
+        id: stableId,
+        originalBarcode: it.barcode || ''
+      });
+    });
   } else {
     items = [createNewItem({
       barcode: '',
@@ -656,7 +671,23 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     if (product) {
       let isSelf = false;
       if (isEdit && targetSupply && targetSupply.items) {
-        isSelf = targetSupply.items.some((it) => it.id === currentItemId && it.barcode && it.barcode.trim().toUpperCase() === clean);
+        const currentItem = items.find((it) => it.id === currentItemId);
+        const originalBc = (currentItem && currentItem.originalBarcode) 
+          ? currentItem.originalBarcode.trim().toUpperCase() 
+          : '';
+
+        // Dianggap milik item sendiri jika:
+        // 1. Barcode sama persis dengan barcode asli saat form dibuka (user hanya edit harga/nama/dsb), ATAU
+        // 2. Barcode ada di data item targetSupply yang sedang diedit ini
+        if (originalBc && originalBc === clean) {
+          isSelf = true;
+        } else {
+          isSelf = targetSupply.items.some((it) => {
+            const matchesId = it.id && it.id === currentItemId;
+            const matchesBc = it.barcode && it.barcode.trim().toUpperCase() === clean;
+            return matchesId && matchesBc;
+          });
+        }
       }
       if (!isSelf) {
         return {
@@ -1340,6 +1371,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     if (isAppend && targetSupply) {
       items.forEach((itemToAdd) => {
         store.addItemToSupply(targetSupply.id, {
+          id: itemToAdd.id,
           name: itemToAdd.name.trim(),
           barcode: itemToAdd.barcode.trim(),
           kondisi: itemToAdd.kondisi || 'Bagus',
@@ -1362,6 +1394,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     const status = statusRadio ? statusRadio.value : (targetSupply ? targetSupply.status : 'lunas');
 
     const cleanItems = items.map((it) => ({
+      id: it.id,
       name: it.name.trim(),
       barcode: it.barcode.trim(),
       kondisi: it.kondisi || 'Bagus',

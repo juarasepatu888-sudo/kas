@@ -1015,6 +1015,24 @@ class Store {
         });
       }
 
+      // Sync transaction kas keluar jika ada
+      const existingNota = existing.invoiceNo;
+      if (existingNota && updatedData.totalAmount !== undefined) {
+        const trxs = this.state.transactions || [];
+        const relatedTrx = trxs.find((t) => t.type === 'keluar' && t.nota === existingNota);
+        if (relatedTrx) {
+          relatedTrx.amount = Number(updatedData.totalAmount) || 0;
+          if (updatedData.supplierName) {
+            const count = updatedData.itemsCount || (updatedItems ? updatedItems.length : 1);
+            relatedTrx.title = `Belanja ${updatedData.supplierName} (${count} pasang)`;
+          }
+          if (updatedData.date) {
+            relatedTrx.date = updatedData.date;
+          }
+        }
+      }
+
+      this.saveState();
       this.notify();
       return this.state.supplies[idx];
     }
