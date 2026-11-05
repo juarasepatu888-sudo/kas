@@ -238,7 +238,7 @@ export function renderTambahBarangMasukPage(store, params = {}) {
 
   const defaultSupplier = targetSupply ? targetSupply.supplierName : '';
   const defaultDate = targetSupply ? targetSupply.date : getLocalDateString();
-  const defaultStatus = targetSupply ? targetSupply.status : 'lunas';
+  const defaultStatus = targetSupply ? targetSupply.status : 'pre-paid';
 
   const cleanPrefix = (defaultSupplier || '').trim().toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9_-]/g, '') || 'BALL';
   const initialInvoicePreview = targetSupply ? targetSupply.invoiceNo : `${cleanPrefix}-${Math.floor(100 + Math.random() * 900)}`;
@@ -399,12 +399,23 @@ export function renderTambahBarangMasukPage(store, params = {}) {
         </button>
 
         ${!isAppend ? `
-          <!-- Status Pembayaran Belanja (Lunas / Pre-Paid / Tempo) -->
+          <!-- Status Pembayaran Belanja (Pre-Paid utama / Lunas / Tempo) -->
  <div class="glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-3">
             <span class="font-label-md text-xs text-primary font-bold uppercase tracking-wider">Status Pembayaran Belanja</span>
-            
+
+            <!-- Pre-Paid: pilihan utama full width di atas -->
+            <label class="status-radio-opt cursor-pointer p-3 rounded-xl border-2 ${defaultStatus === 'pre-paid' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2 w-full">
+              <input type="radio" name="supplyStatus" value="pre-paid" ${defaultStatus === 'pre-paid' ? 'checked' : ''} class="hidden"/>
+              <span class="material-symbols-outlined text-[20px]">history_edu</span>
+              <div class="flex flex-col flex-1">
+                <span class="font-label-md text-xs font-bold">💳 Pre-Paid / Sudah Dibayar Sebelumnya</span>
+                <span class="text-[10px] text-on-surface-variant">Kas keluar sudah dicatat manual sebelumnya — stok masuk tanpa potong kas lagi</span>
+              </div>
+            </label>
+
+            <!-- Lunas & Tempo: 2 pilihan lain di bawah -->
             <div class="grid grid-cols-2 gap-2">
- <label class="status-radio-opt cursor-pointer p-3 rounded-xl border-2 ${defaultStatus === 'lunas' ? 'border-primary bg-secondary-container text-primary' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2">
+ <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'lunas' ? 'border-2 border-primary bg-secondary-container text-primary' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2">
                 <input type="radio" name="supplyStatus" value="lunas" ${defaultStatus === 'lunas' ? 'checked' : ''} class="hidden"/>
                 <span class="material-symbols-outlined text-[20px]">check_circle</span>
                 <div class="flex flex-col">
@@ -422,16 +433,6 @@ export function renderTambahBarangMasukPage(store, params = {}) {
                 </div>
               </label>
             </div>
-
-            <!-- Pre-Paid: full width -->
-            <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'pre-paid' ? 'border-2 border-blue-500 bg-blue-50 text-blue-700' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2 w-full">
-              <input type="radio" name="supplyStatus" value="pre-paid" ${defaultStatus === 'pre-paid' ? 'checked' : ''} class="hidden"/>
-              <span class="material-symbols-outlined text-[20px]">history_edu</span>
-              <div class="flex flex-col flex-1">
-                <span class="font-label-md text-xs font-bold">Pre-Paid / Sudah Dibayar Sebelumnya</span>
-                <span class="text-[10px] text-on-surface-variant">Kas keluar sudah dicatat manual sebelumnya — stok masuk tanpa potong kas lagi</span>
-              </div>
-            </label>
           </div>
         ` : ''}
 
