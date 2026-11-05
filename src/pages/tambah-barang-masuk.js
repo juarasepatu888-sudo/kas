@@ -298,8 +298,8 @@ export function renderTambahBarangMasukPage(store, params = {}) {
                 <span class="material-symbols-outlined text-primary text-[20px]">inventory</span>
                 <span class="font-title-ledger text-sm font-bold text-on-surface">Nota ${targetSupply.invoiceNo}</span>
               </div>
-              <span class="font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${targetSupply.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
-                ${targetSupply.status === 'lunas' ? 'Lunas' : 'Tempo / Bon'}
+              <span class="font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${targetSupply.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : targetSupply.status === 'pre-paid' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">
+                ${targetSupply.status === 'lunas' ? 'Lunas' : targetSupply.status === 'pre-paid' ? 'Pre-Paid' : 'Tempo / Bon'}
               </span>
             </div>
 
@@ -399,7 +399,7 @@ export function renderTambahBarangMasukPage(store, params = {}) {
         </button>
 
         ${!isAppend ? `
-          <!-- Status Pembayaran Belanja (Lunas / Tempo) -->
+          <!-- Status Pembayaran Belanja (Lunas / Pre-Paid / Tempo) -->
  <div class="glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-3">
             <span class="font-label-md text-xs text-primary font-bold uppercase tracking-wider">Status Pembayaran Belanja</span>
             
@@ -422,6 +422,16 @@ export function renderTambahBarangMasukPage(store, params = {}) {
                 </div>
               </label>
             </div>
+
+            <!-- Pre-Paid: full width -->
+            <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'pre-paid' ? 'border-2 border-blue-500 bg-blue-50 text-blue-700' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2 w-full">
+              <input type="radio" name="supplyStatus" value="pre-paid" ${defaultStatus === 'pre-paid' ? 'checked' : ''} class="hidden"/>
+              <span class="material-symbols-outlined text-[20px]">history_edu</span>
+              <div class="flex flex-col flex-1">
+                <span class="font-label-md text-xs font-bold">Pre-Paid / Sudah Dibayar Sebelumnya</span>
+                <span class="text-[10px] text-on-surface-variant">Kas keluar sudah dicatat manual sebelumnya — stok masuk tanpa potong kas lagi</span>
+              </div>
+            </label>
           </div>
         ` : ''}
 

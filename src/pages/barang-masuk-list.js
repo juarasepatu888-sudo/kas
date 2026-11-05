@@ -101,6 +101,9 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
           <button type="button" data-filter="lunas" class="pasok-filter-btn flex-1 py-1 px-1.5 rounded-md ${filterStatus === 'lunas' ? 'glass-seg-active text-emerald-800 font-bold' : 'text-on-surface-variant'} font-label-md text-[11px] transition-all text-center">
             Lunas
           </button>
+          <button type="button" data-filter="pre-paid" class="pasok-filter-btn flex-1 py-1 px-1.5 rounded-md ${filterStatus === 'pre-paid' ? 'glass-seg-active text-blue-700 font-bold' : 'text-on-surface-variant'} font-label-md text-[11px] transition-all text-center">
+            Pre-Paid
+          </button>
           <button type="button" data-filter="tempo" class="pasok-filter-btn flex-1 py-1 px-1.5 rounded-md ${filterStatus === 'tempo' ? 'glass-seg-active text-amber-800 font-bold' : 'text-on-surface-variant'} font-label-md text-[11px] transition-all text-center">
             Tempo / Bon
           </button>
@@ -208,6 +211,7 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
 
     container.innerHTML = list.map((supply) => {
       const isLunas = supply.status === 'lunas';
+      const isPrePaid = supply.status === 'pre-paid';
       const isOpen = expandedSupplies.has(supply.id);
       return `
         <div class="glass-card glass-sheen rounded-xl p-2.5 flex flex-col gap-1.5">
@@ -217,8 +221,8 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
               <span class="material-symbols-outlined text-primary text-[16px]">shopping_bag</span>
               <span class="font-title-ledger text-xs font-bold text-on-surface">${supply.invoiceNo}</span>
             </div>
-            <span class="font-label-sm text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider glass-chip ${isLunas ? 'text-emerald-800' : 'text-amber-800'}">
-              ${isLunas ? 'Lunas' : 'Tempo / Bon'}
+            <span class="font-label-sm text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider glass-chip ${isLunas ? 'text-emerald-800' : isPrePaid ? 'text-blue-700' : 'text-amber-800'}">
+              ${isLunas ? 'Lunas' : isPrePaid ? '💳 Pre-Paid' : 'Tempo / Bon'}
             </span>
           </div>
 

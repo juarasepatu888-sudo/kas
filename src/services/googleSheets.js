@@ -2078,7 +2078,7 @@ export async function syncAllToGoogleSheets(store, explicitSpreadsheetId = null)
       const inv = s.invoiceNo || s.id || '-';
       const tgl = cleanDateString(s.date) || '-';
       const sup = s.supplierName || '-';
-      const statusLabel = s.status === 'lunas' ? 'Lunas' : 'Belum Lunas';
+      const statusLabel = s.status === 'lunas' ? 'Lunas' : s.status === 'pre-paid' ? 'Pre-Paid (Sudah Dibayar Sebelumnya)' : 'Belum Lunas / Tempo';
       const payMethod = s.paymentMethod || 'Tunai (Laci)';
       const notes = s.notes || '-';
 

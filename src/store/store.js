@@ -210,7 +210,7 @@ class Store {
     let changed = false;
 
     data.supplies.forEach((s) => {
-      if (s.status !== 'lunas') return;
+      if (s.status !== 'lunas') return; // 'tempo' dan 'pre-paid' dilewati — tidak perlu rekonsiliasi kas keluar
       const invNo = (s.invoiceNo || '').trim();
       if (!invNo) return;
 
@@ -951,7 +951,9 @@ class Store {
       });
     }
 
-    // If paid immediately, also record a cash out transaction!
+    // If paid immediately (lunas), also record a cash out transaction!
+    // 'pre-paid' = sudah dibayar sebelumnya (via kas keluar manual) → stok masuk, kas TIDAK dipotong lagi
+    // 'tempo'    = bayar nanti ke supplier → stok masuk, kas TIDAK dipotong sekarang
     if (supply.status === 'lunas' && supply.recordTransaction !== false) {
       this.addTransaction({
         type: 'keluar',
@@ -962,6 +964,7 @@ class Store {
         nota: newSupply.invoiceNo
       });
     }
+    // 'pre-paid': no cash out recorded here — payment was already registered manually
 
     this.notify();
     return newSupply;
@@ -1055,7 +1058,7 @@ class Store {
       itemsCount: itemsCount
     });
 
-    // Record cash out if lunas
+    // Record cash out if lunas (bukan pre-paid, karena pre-paid sudah dibayar sebelumnya)
     if (existing.status === 'lunas') {
       const addedAmount = (Number(newItem.buyPrice) || 0) * (Number(newItem.qty) || 1);
       this.addTransaction({
@@ -1067,6 +1070,7 @@ class Store {
         nota: existing.invoiceNo
       });
     }
+    // 'pre-paid': no additional cash out when appending items — payment already recorded manually
 
     return updated;
   }

@@ -24,6 +24,7 @@ function _save(data) {
 /**
  * Memastikan setiap faktur pengadaan belanja (supplies) yang berstatus 'lunas'
  * memiliki transaksi kas keluar 'Belanja Barang' yang lengkap sejumlah totalAmount faktur.
+ * Status 'pre-paid' dan 'tempo' dilewati — pembayaran dikelola secara terpisah.
  * @returns {boolean} true jika ada perubahan
  */
 export function migrateReconcileSupplyTransactions(data) {
@@ -31,7 +32,7 @@ export function migrateReconcileSupplyTransactions(data) {
   let changed = false;
 
   data.supplies.forEach((s) => {
-    if (s.status !== 'lunas') return;
+    if (s.status !== 'lunas') return; // 'tempo' dan 'pre-paid' tidak memerlukan rekonsiliasi kas keluar otomatis
     const invNo = (s.invoiceNo || '').trim();
     if (!invNo) return;
 
