@@ -1219,7 +1219,7 @@ export function initLaporanPage(router, store, initialPeriod = 'bulan') {
                 </div>
               ` : `
                 <div class="text-[9.5px] text-amber-300 italic bg-amber-950/20 p-1.5 rounded-lg border border-amber-500/20">
-                  ⚠️ Dana belanja/ongkir tercatat Rp ${formatRupiah(r.grandTotalCost, '')}. Saat barang tiba (tgl 25), input stok di menu Barang Masuk dengan nota <strong>"${r.invoiceNo}"</strong> agar HPP per pasang otomatis terhitung.
+                  ⚠️ Dana belanja/ongkir tercatat Rp ${formatRupiah(r.grandTotalCost, '')}. Saat barang tiba, input stok di menu Barang Masuk dengan nota <strong>"${r.invoiceNo}"</strong> agar HPP per pasang otomatis terhitung.
                 </div>
               `}
             </div>
