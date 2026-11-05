@@ -1681,6 +1681,181 @@ class Store {
     };
   }
 
+  /**
+   * Laporan HPP (Harga Pokok Pembelian) Sepatu per Faktur Belanja
+   * Rumus: (Biaya Belanja Sepatu + Biaya Ongkir Belanja) / Total Pasang Sepatu
+   * @param {string} filterFaktur - 'all' atau nomor faktur spesifik (misal 'BALL-519')
+   */
+  getHppReports(filterFaktur = 'all') {
+    const supplies = Array.isArray(this.state.supplies) ? this.state.supplies : [];
+    const transactions = Array.isArray(this.state.transactions) ? this.state.transactions : [];
+
+    const reports = [];
+    const processedNotas = new Set();
+
+    supplies.forEach((s) => {
+      const invNo = (s.invoiceNo || s.id || '').trim();
+      const invUpper = invNo.toUpperCase();
+      if (invUpper) processedNotas.add(invUpper);
+
+      // Total pasang dari items atau itemsCount
+      let itemsCount = 0;
+      if (Array.isArray(s.items) && s.items.length > 0) {
+        itemsCount = s.items.reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
+      } else {
+        itemsCount = Number(s.itemsCount) || 1;
+      }
+      if (itemsCount <= 0) itemsCount = 1;
+
+      const supplyTotal = Number(s.totalAmount) || 0;
+
+      // Cari transaksi belanja terkait faktur ini
+      const belanjaTrxs = transactions.filter((t) => {
+        if (t.type !== 'keluar') return false;
+        const cat = (t.category || '').toUpperCase();
+        const isBelanja = cat === 'BIAYA BELANJA SEPATU' || cat === 'BELANJA BARANG' || cat === 'BELANJA' || cat.includes('BELANJA');
+        const isOngkir = cat.includes('ONGKIR');
+        if (!isBelanja || isOngkir) return false;
+
+        const notaUpper = (t.nota || '').trim().toUpperCase();
+        const textUpper = ((t.title || '') + ' ' + (t.keterangan || '')).toUpperCase();
+        return (notaUpper && notaUpper === invUpper) || (invUpper && textUpper.includes(invUpper));
+      });
+
+      // Cari transaksi ongkir terkait faktur ini
+      const ongkirTrxs = transactions.filter((t) => {
+        if (t.type !== 'keluar') return false;
+        const cat = (t.category || '').toUpperCase();
+        const isOngkir = cat === 'BIAYA ONGKIR BELANJA' || cat.includes('ONGKIR');
+        if (!isOngkir) return false;
+
+        const notaUpper = (t.nota || '').trim().toUpperCase();
+        const textUpper = ((t.title || '') + ' ' + (t.keterangan || '')).toUpperCase();
+        return (notaUpper && notaUpper === invUpper) || (invUpper && textUpper.includes(invUpper));
+      });
+
+      // Nominal belanja: gunakan transaksi kas keluar riil jika ada, atau fallback ke supply.totalAmount
+      const sumBelanjaTrx = belanjaTrxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+      const totalBelanja = sumBelanjaTrx > 0 ? sumBelanjaTrx : supplyTotal;
+
+      // Nominal ongkir: jumlah transaksi kategori ongkir belanja
+      const totalOngkir = ongkirTrxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+      const grandTotalCost = totalBelanja + totalOngkir;
+      const hppPerPcs = itemsCount > 0 ? Math.round(grandTotalCost / itemsCount) : 0;
+      const modalBeliPerPcs = itemsCount > 0 ? Math.round(totalBelanja / itemsCount) : 0;
+      const ongkirPerPcs = itemsCount > 0 ? Math.round(totalOngkir / itemsCount) : 0;
+
+      reports.push({
+        id: s.id,
+        invoiceNo: invNo,
+        supplierName: s.supplierName || 'Suplier Sepatu',
+        date: s.date || '',
+        status: s.status || 'lunas',
+        itemsCount,
+        totalBelanja,
+        totalOngkir,
+        grandTotalCost,
+        hppPerPcs,
+        modalBeliPerPcs,
+        ongkirPerPcs,
+        belanjaTrxsCount: belanjaTrxs.length,
+        ongkirTrxsCount: ongkirTrxs.length,
+        hasSupplyRecord: true
+      });
+    });
+
+    // Cari transaksi belanja / ongkir yang notanya belum masuk ke supplies (barang dalam perjalanan)
+    const orphanTrxs = transactions.filter((t) => {
+      if (t.type !== 'keluar') return false;
+      const cat = (t.category || '').toUpperCase();
+      const isBelanja = cat === 'BIAYA BELANJA SEPATU' || cat.includes('BELANJA');
+      const isOngkir = cat === 'BIAYA ONGKIR BELANJA' || cat.includes('ONGKIR');
+      if (!isBelanja && !isOngkir) return false;
+
+      const notaUpper = (t.nota || '').trim().toUpperCase();
+      return notaUpper && !processedNotas.has(notaUpper);
+    });
+
+    const orphanMap = new Map();
+    orphanTrxs.forEach((t) => {
+      const nota = (t.nota || '').trim();
+      const notaUpper = nota.toUpperCase();
+      if (!orphanMap.has(notaUpper)) {
+        orphanMap.set(notaUpper, {
+          invoiceNo: nota,
+          date: t.date || '',
+          belanja: 0,
+          ongkir: 0,
+          trxs: []
+        });
+      }
+      const item = orphanMap.get(notaUpper);
+      const cat = (t.category || '').toUpperCase();
+      if (cat.includes('ONGKIR')) {
+        item.ongkir += Number(t.amount) || 0;
+      } else {
+        item.belanja += Number(t.amount) || 0;
+      }
+      item.trxs.push(t);
+    });
+
+    orphanMap.forEach((val) => {
+      reports.push({
+        id: `PENDING-${val.invoiceNo}`,
+        invoiceNo: val.invoiceNo,
+        supplierName: 'Barang Dalam Perjalanan (Belum Input Stok)',
+        date: val.date,
+        status: 'pending-arrival',
+        itemsCount: 0,
+        totalBelanja: val.belanja,
+        totalOngkir: val.ongkir,
+        grandTotalCost: val.belanja + val.ongkir,
+        hppPerPcs: 0,
+        modalBeliPerPcs: 0,
+        ongkirPerPcs: 0,
+        belanjaTrxsCount: val.trxs.filter((t) => !(t.category || '').toUpperCase().includes('ONGKIR')).length,
+        ongkirTrxsCount: val.trxs.filter((t) => (t.category || '').toUpperCase().includes('ONGKIR')).length,
+        hasSupplyRecord: false
+      });
+    });
+
+    // Urutkan laporan terbaru di atas
+    reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    // Filter jika faktur dipilih spesifik
+    let filteredReports = reports;
+    if (filterFaktur && filterFaktur !== 'all') {
+      const target = filterFaktur.trim().toUpperCase();
+      filteredReports = reports.filter((r) => (r.invoiceNo || '').trim().toUpperCase() === target);
+    }
+
+    // Hitung ringkasan akumulasi
+    const validReportsForCalc = filteredReports.filter((r) => r.itemsCount > 0);
+    const totalPasang = validReportsForCalc.reduce((sum, r) => sum + (r.itemsCount || 0), 0);
+    const totalBelanjaAll = filteredReports.reduce((sum, r) => sum + r.totalBelanja, 0);
+    const totalOngkirAll = filteredReports.reduce((sum, r) => sum + r.totalOngkir, 0);
+    const grandTotalAll = totalBelanjaAll + totalOngkirAll;
+    const avgHppPerPcs = totalPasang > 0 ? Math.round(grandTotalAll / totalPasang) : 0;
+    const avgModalBeliPerPcs = totalPasang > 0 ? Math.round(totalBelanjaAll / totalPasang) : 0;
+    const avgOngkirPerPcs = totalPasang > 0 ? Math.round(totalOngkirAll / totalPasang) : 0;
+
+    return {
+      reports: filteredReports,
+      allReports: reports,
+      summary: {
+        totalFaktur: filteredReports.length,
+        totalPasang,
+        totalBelanjaAll,
+        totalOngkirAll,
+        grandTotalAll,
+        avgHppPerPcs,
+        avgModalBeliPerPcs,
+        avgOngkirPerPcs
+      }
+    };
+  }
+
   // Reset / Bersihkan Data
   /**
    * Hapus HANYA record contoh (dummy) bawaan aplikasi, berdasarkan ID/barcode persis.

@@ -9,7 +9,30 @@ Aplikasi buku kas digital untuk toko sepatu yang mengelola transaksi penjualan, 
 - **Storage:** LocalStorage (untuk data lokal & foto produk)
 - **Barcode Scanner:** `html5-qrcode`
 
-## Konteks Terakhir (Update 28 Oktober 2026)
+## Konteks Terakhir (Update 5 November 2026)
+
+### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)
+**Waktu:** 5 November 2026  
+**Tujuan:** (1) Menghilangkan bentrok kas keluar ganda ketika belanja sepatu dibayar di awal (misal tgl 1) dan barang baru datang kemudian (tgl 25) lewat status `pre-paid`, (2) Membangun Laporan HPP (Harga Pokok Pembelian) otomatis yang menggabungkan `BIAYA BELANJA SEPATU` + `BIAYA ONGKIR BELANJA` dibagi total pasang sepatu.
+
+**Poin-Poin Perbaikan & Fitur Baru:**
+1. **Opsi Status Pembayaran "Pre-Paid" (Sudah Dibayar Sebelumnya):**
+   - Menambahkan status `pre-paid` di form Tambah Belanja (`src/pages/tambah-barang-masuk.js`) dengan susunan 1-2 (Pre-Paid sebagai pilihan utama di atas, Lunas & Tempo di bawah berdampingan).
+   - Menambahkan filter dan badge `💳 Pre-Paid` di daftar belanja (`src/pages/barang-masuk-list.js`).
+   - `store.js` & `store-migrations.js`: Status `pre-paid` memasukkan kuantitas stok tanpa memicu kas keluar ganda dan dikecualikan dari auto-reconcile kas keluar.
+2. **Penghubung Faktur Belanja pada Kas Keluar (`src/pages/tambah-transaksi.js`):**
+   - Saat memilih kategori `BIAYA BELANJA SEPATU` atau `BIAYA ONGKIR BELANJA`, form otomatis menampilkan dropdown *Faktur Belanja Terkait* (daftar faktur dari Barang Masuk) serta opsi input manual nomor faktur baru.
+   - Disimpan pada field `nota` transaksi pengeluaran.
+3. **Laporan HPP Sepatu di Halaman Laporan (`src/pages/laporan.js` & `src/store/store.js`):**
+   - Method baru `store.getHppReports(filterFaktur)`: Menghitung belanja sepatu + ongkir belanja per faktur dan membaginya dengan total pasang sepatu. Mendeteksi pula transaksi pending sebelum stok diinput.
+   - Widget Laporan HPP interaktif:
+     - 4 KPI: HPP Rata-Rata/Psg, Total Belanja Pokok, Total Ongkir Belanja, Total Pasang Sepatu.
+     - Collapsible list rincian per faktur: Tanggal, Suplier, Total Belanja, Total Ongkir, Grand Total Biaya, dan HPP Aktual per Pasang `(Beli + Ongkir / psg)`.
+     - Sinkron otomatis saat filter faktur di atas diubah.
+
+---
+
+## Konteks Sebelumnya (Update 28 Oktober 2026)
 
 ### Statistik Penjualan 7 Hari, Perbaikan Desktop, Barcode Scanner Modal & Migrasi Repositori
 **Waktu:** 21–28 Oktober 2026  

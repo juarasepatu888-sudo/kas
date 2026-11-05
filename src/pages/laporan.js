@@ -408,6 +408,11 @@ export function renderLaporanPage(store, period = 'bulan') {
         </section>
       </div>
 
+      <!-- FITUR KHUSUS: Laporan HPP Sepatu (Harga Pokok Pembelian per Pasang: Belanja + Ongkir / Qty) -->
+      <section class="glass-card glass-sheen rounded-lg p-2.5 flex flex-col gap-2 relative overflow-hidden" id="section-hpp-laporan">
+        <!-- Konten HPP dirender dinamis via updateHppReport() di updatePage() -->
+      </section>
+
       <!-- FITUR KHUSUS: Laporan Investasi & Bagi Hasil (60:40) -->
         <section class="glass-card glass-sheen rounded-lg p-2.5 flex flex-col gap-1.5 relative overflow-hidden" id="section-investasi-laporan">
           <div class="absolute -right-6 -top-6 w-20 h-20 rounded-full bg-amber-500/10 pointer-events-none"></div>
@@ -627,6 +632,7 @@ export function initLaporanPage(router, store, initialPeriod = 'bulan') {
   let currentFaktur = 'all';
   let isSepatuListExpanded = false;
   let isSisaStockExpanded = false;
+  let isHppListExpanded = false;
   let customDate = new Date().toISOString().split('T')[0];
   let customMonth = new Date().toISOString().slice(0, 7);
 
@@ -1060,9 +1066,192 @@ export function initLaporanPage(router, store, initialPeriod = 'bulan') {
           .join('');
       }
     }
+    // Update Laporan HPP
+    updateHppReport();
   }
 
-  // Toggle dropdown sepatu laku
+  function updateHppReport() {
+    const sectionEl = g('section-hpp-laporan');
+    if (!sectionEl) return;
+
+    const hppData = store.getHppReports ? store.getHppReports(currentFaktur) : { reports: [], summary: {} };
+    const summary = hppData.summary || {};
+    const reports = hppData.reports || [];
+    const fakturLabel = currentFaktur === 'all' ? 'Semua Faktur' : currentFaktur;
+
+    sectionEl.innerHTML = `
+      <div class="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-indigo-500/10 pointer-events-none"></div>
+
+      <!-- Header Laporan HPP -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5">
+          <div class="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[14px]">price_change</span>
+          </div>
+          <div>
+            <h3 class="font-bold text-[11px] text-on-surface">Laporan HPP Sepatu (Modal + Ongkir)</h3>
+            <p class="text-[9px] text-on-surface-variant">Harga Pokok Pembelian per pasang (Belanja + Ongkir / Qty)</p>
+          </div>
+        </div>
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-bold border border-indigo-500/30">
+          <span class="material-symbols-outlined text-[11px]">filter_alt</span>
+          ${fakturLabel}
+        </span>
+      </div>
+
+      <!-- 4 KPI Cards Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 mt-0.5">
+        <!-- Card 1: HPP Rata-Rata -->
+        <div class="glass-card rounded-lg p-2 flex flex-col justify-between border border-indigo-500/40 bg-indigo-950/20">
+          <span class="text-[9px] text-indigo-300 font-bold uppercase tracking-wider">HPP Rata-Rata / Psg</span>
+          <div class="flex items-baseline gap-1 my-1">
+            <span class="text-base md:text-lg font-extrabold text-indigo-200 font-tabular truncate">${formatRupiah(summary.avgHppPerPcs || 0)}</span>
+            <span class="text-[9px] text-indigo-300/80 font-semibold">/psg</span>
+          </div>
+          <span class="text-[8.5px] text-indigo-200/70 truncate">Modal murni + beban ongkir</span>
+        </div>
+
+        <!-- Card 2: Total Belanja Pokok -->
+        <div class="glass-panel rounded-lg p-2 flex flex-col justify-between border border-white/10">
+          <span class="text-[9px] text-on-surface-variant font-bold uppercase tracking-wider">Belanja Sepatu</span>
+          <div class="flex items-baseline gap-1 my-1">
+            <span class="text-xs md:text-sm font-bold text-on-surface font-tabular truncate">${formatRupiah(summary.totalBelanjaAll || 0)}</span>
+          </div>
+          <span class="text-[8.5px] text-on-surface-variant">Avg: ${formatRupiah(summary.avgModalBeliPerPcs || 0)} /psg</span>
+        </div>
+
+        <!-- Card 3: Total Ongkir Belanja -->
+        <div class="glass-panel rounded-lg p-2 flex flex-col justify-between border border-amber-500/20">
+          <span class="text-[9px] text-amber-400 font-bold uppercase tracking-wider">Ongkir Belanja</span>
+          <div class="flex items-baseline gap-1 my-1">
+            <span class="text-xs md:text-sm font-bold text-amber-300 font-tabular truncate">${formatRupiah(summary.totalOngkirAll || 0)}</span>
+          </div>
+          <span class="text-[8.5px] text-amber-300/80">Beban: ${formatRupiah(summary.avgOngkirPerPcs || 0)} /psg</span>
+        </div>
+
+        <!-- Card 4: Total Pasang Sepatu -->
+        <div class="glass-panel rounded-lg p-2 flex flex-col justify-between border border-emerald-500/20">
+          <span class="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">Total Sepatu</span>
+          <div class="flex items-baseline gap-1 my-1">
+            <span class="text-sm md:text-base font-extrabold text-emerald-300 font-tabular">${summary.totalPasang || 0}</span>
+            <span class="text-[10px] font-bold text-emerald-400">Pasang</span>
+          </div>
+          <span class="text-[8.5px] text-emerald-300/80">${summary.totalFaktur || 0} Faktur Belanja</span>
+        </div>
+      </div>
+
+      <!-- Toggle Detail Per Faktur Belanja -->
+      <button type="button" id="btn-toggle-hpp-list"
+        class="glass-chip-btn w-full py-1.5 px-2.5 rounded-lg text-on-surface text-[10px] font-bold flex items-center justify-between active:scale-[0.99] mt-0.5 border border-indigo-500/20">
+        <div class="flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[14px] text-indigo-400">table_rows</span>
+          <span id="btn-toggle-hpp-label">${isHppListExpanded ? 'Tutup Rincian HPP per Faktur' : `Lihat Rincian HPP per Faktur (${reports.length} Faktur)`}</span>
+        </div>
+        <span class="material-symbols-outlined text-[15px] transition-transform duration-200" id="icon-toggle-hpp" style="transform: ${isHppListExpanded ? 'rotate(180deg)' : 'rotate(0deg)'}">expand_more</span>
+      </button>
+
+      <!-- Container Rincian Per Faktur (Collapsible) -->
+      <div id="container-daftar-hpp" class="${isHppListExpanded ? '' : 'hidden'} flex flex-col gap-2 pt-1 border-t border-white/20">
+        ${reports.length === 0 ? `
+          <div class="py-4 text-center text-xs text-on-surface-variant glass-panel rounded-xl">
+            Belum ada data belanja/faktur untuk perhitungan HPP.
+          </div>
+        ` : reports.map((r) => {
+          const isPending = r.status === 'pending-arrival';
+          const statusBadge = isPending
+            ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">⏳ Barang OTW</span>'
+            : (r.status === 'pre-paid'
+              ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">💳 Pre-Paid</span>'
+              : (r.status === 'lunas'
+                ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Lunas</span>'
+                : '<span class="text-[9px] px-1.5 py-0.2 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Tempo</span>'));
+
+          return `
+            <div class="glass-panel p-2.5 rounded-xl flex flex-col gap-2 border border-white/10 hover:border-indigo-500/30 transition-all">
+              <!-- Top Row: Faktur & Status -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-indigo-400">inventory</span>
+                  <span class="font-bold text-xs text-on-surface">${r.invoiceNo}</span>
+                  ${statusBadge}
+                </div>
+                <span class="text-[10px] text-on-surface-variant font-medium">${r.date || '-'}</span>
+              </div>
+
+              <!-- Supplier Name & Items Count -->
+              <div class="flex items-center justify-between text-xs text-on-surface-variant">
+                <span class="font-semibold text-on-surface truncate">${r.supplierName}</span>
+                <span class="shrink-0 font-bold text-on-surface bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                  ${r.itemsCount > 0 ? `${r.itemsCount} Pasang` : 'Belum input pcs'}
+                </span>
+              </div>
+
+              <!-- Breakdown 3 Kolom: Beli + Ongkir = Total Biaya -->
+              <div class="grid grid-cols-3 gap-1.5 p-1.5 rounded-lg bg-black/25 text-[10px] border border-white/5">
+                <div class="flex flex-col">
+                  <span class="text-[9px] text-on-surface-variant">1. Belanja Sepatu</span>
+                  <span class="font-bold text-on-surface font-tabular">${formatRupiah(r.totalBelanja)}</span>
+                </div>
+                <div class="flex flex-col border-l border-white/10 pl-1.5">
+                  <span class="text-[9px] text-amber-300">2. Ongkir Kargo</span>
+                  <span class="font-bold text-amber-300 font-tabular">+${formatRupiah(r.totalOngkir)}</span>
+                </div>
+                <div class="flex flex-col border-l border-white/10 pl-1.5">
+                  <span class="text-[9px] text-indigo-300 font-bold">Total Pengadaan</span>
+                  <span class="font-extrabold text-indigo-200 font-tabular">${formatRupiah(r.grandTotalCost)}</span>
+                </div>
+              </div>
+
+              <!-- Bottom Highlight: HPP Aktual Satuan -->
+              ${r.itemsCount > 0 ? `
+                <div class="flex items-center justify-between pt-1 border-t border-white/10 bg-indigo-950/20 -mx-2.5 -mb-2.5 p-2 rounded-b-xl">
+                  <div class="flex flex-col">
+                    <span class="text-[9px] text-indigo-300 font-semibold uppercase tracking-wider">HPP Aktual Satuan</span>
+                    <span class="text-[9.5px] text-on-surface-variant">
+                      Beli ${formatRupiah(r.modalBeliPerPcs)} + Ongkir ${formatRupiah(r.ongkirPerPcs)}/psg
+                    </span>
+                  </div>
+                  <div class="flex flex-col items-end shrink-0">
+                    <span class="text-sm font-extrabold text-indigo-300 font-tabular">
+                      ${formatRupiah(r.hppPerPcs)} <span class="text-[9px] font-semibold text-indigo-300/80">/psg</span>
+                    </span>
+                  </div>
+                </div>
+              ` : `
+                <div class="text-[9.5px] text-amber-300 italic bg-amber-950/20 p-1.5 rounded-lg border border-amber-500/20">
+                  ⚠️ Dana belanja/ongkir tercatat Rp ${formatRupiah(r.grandTotalCost, '')}. Saat barang tiba (tgl 25), input stok di menu Barang Masuk dengan nota <strong>"${r.invoiceNo}"</strong> agar HPP per pasang otomatis terhitung.
+                </div>
+              `}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    // Bind toggle click
+    const btnToggleHpp = g('btn-toggle-hpp-list');
+    const containerHpp = g('container-daftar-hpp');
+    const iconToggleHpp = g('icon-toggle-hpp');
+    const labelToggleHpp = g('btn-toggle-hpp-label');
+
+    if (btnToggleHpp && containerHpp) {
+      btnToggleHpp.addEventListener('click', () => {
+        isHppListExpanded = !isHppListExpanded;
+        if (isHppListExpanded) {
+          containerHpp.classList.remove('hidden');
+          if (iconToggleHpp) iconToggleHpp.style.transform = 'rotate(180deg)';
+        } else {
+          containerHpp.classList.add('hidden');
+          if (iconToggleHpp) iconToggleHpp.style.transform = 'rotate(0deg)';
+        }
+        if (labelToggleHpp) {
+          labelToggleHpp.textContent = isHppListExpanded
+            ? 'Tutup Rincian HPP per Faktur'
+            : `Lihat Rincian HPP per Faktur (${reports.length} Faktur)`;
+        }
+      });
+    }
+  }
   const btnToggleSepatu = g('btn-toggle-sepatu-list');
   const containerSepatu = g('container-daftar-sepatu-laku');
   const iconToggleSepatu = g('icon-toggle-sepatu');

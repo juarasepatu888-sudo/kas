@@ -129,6 +129,8 @@ export function renderTambahTransaksiPage(store, params = {}) {
   const defaultNominalKeluar = (existingTrx && existingTrx.type === 'keluar') ? formatRupiah(existingTrx.amount, '') : '';
   const defaultPhoto = existingTrx ? (existingTrx.photo || '') : '';
   const defaultDate = existingTrx ? (existingTrx.date || getLocalDateString()) : getLocalDateString();
+  const defaultNota = existingTrx ? (existingTrx.nota || '') : '';
+  const supplies = store.getSupplies ? store.getSupplies() : [];
   const totalItemsPrice = initialItems.reduce((s, it) => s + (Number(it.price) || 0), 0);
 
   return `
@@ -247,6 +249,34 @@ export function renderTambahTransaksiPage(store, params = {}) {
             </div>
             <div class="grid grid-cols-2 gap-2" id="kategori-keluar-grid">
  ${KATEGORI_KELUAR.map((cat) => { const a = cat.label === defaultCategory; return '<button type="button" data-cat-keluar="' + cat.label + '" class="btn-cat-keluar p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ' + (a ? 'border-2 border-rose-600 bg-rose-50 text-rose-950 font-bold ' : ' text-on-surface-variant hover:') + '"><div class="w-7 h-7 rounded-lg ' + (a ? 'bg-rose-200 text-rose-900' : 'glass-chip text-on-surface-variant') + ' flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[15px]">' + cat.icon + '</span></div><div class="flex flex-col min-w-0"><span class="font-label-md text-[11px] leading-tight truncate">' + cat.label + '</span><span class="text-[9px] text-on-surface-variant/80 truncate leading-tight">' + cat.desc + '</span></div></button>'; }).join('')}
+            </div>
+          </div>
+
+          <!-- Input Faktur Belanja Terkait (Untuk Hitung HPP di Laporan) -->
+          <div id="container-faktur-belanja" class="${(defaultCategory === 'BIAYA BELANJA SEPATU' || defaultCategory === 'BIAYA ONGKIR BELANJA' || defaultNota) ? '' : 'hidden'} glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-2 border border-primary/25">
+            <div class="flex items-center justify-between">
+              <label class="font-label-md text-xs text-primary font-bold flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[18px]">receipt_long</span>
+                <span>Faktur Belanja Terkait (Hitung HPP)</span>
+              </label>
+              <span class="font-label-sm text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold uppercase tracking-wider">HPP</span>
+            </div>
+            <p class="text-[11px] text-on-surface-variant leading-tight">
+              Pilih nota belanja agar biaya belanja & ongkir ini otomatis dihitung ke <strong>HPP per pasang</strong> di Laporan.
+            </p>
+            <select id="select-faktur-belanja" class="w-full px-3 py-2 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all">
+              <option value="">-- Pilih Faktur Belanja / Suplier --</option>
+              ${supplies.map((s) => {
+                const sInv = s.invoiceNo || '';
+                const isSelected = defaultNota && (defaultNota.toUpperCase() === sInv.toUpperCase());
+                const count = s.itemsCount || (Array.isArray(s.items) ? s.items.length : 1);
+                return `<option value="${sInv}" ${isSelected ? 'selected' : ''}>${sInv} • ${s.supplierName || 'Suplier'} (${count} psg)</option>`;
+              }).join('')}
+              <option value="__MANUAL__" ${defaultNota && !supplies.some(s => (s.invoiceNo || '').toUpperCase() === defaultNota.toUpperCase()) ? 'selected' : ''}>✍️ Ketik Nomor Faktur Baru / Lainnya...</option>
+            </select>
+            <div id="wrapper-input-faktur-manual" class="${(defaultNota && !supplies.some(s => (s.invoiceNo || '').toUpperCase() === defaultNota.toUpperCase())) ? '' : 'hidden'} flex flex-col gap-1 mt-1">
+              <input type="text" id="input-faktur-manual" placeholder="Contoh: BALL-519 atau FAK-PASOK-001" value="${defaultNota}" class="w-full px-3 py-2 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all" />
+              <span class="text-[10px] text-on-surface-variant">Ketik nomor faktur jika barang baru akan diinput saat paket tiba</span>
             </div>
           </div>
  <div class="glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-1.5">
@@ -963,10 +993,39 @@ export function initTambahTransaksiPage(router, store, params = {}) {
 
   const selectedKategoriLabel = document.getElementById('selected-kategori-label');
   const catButtons = document.querySelectorAll('.btn-cat-keluar');
+  const containerFakturBelanja = document.getElementById('container-faktur-belanja');
+  const selectFakturBelanja = document.getElementById('select-faktur-belanja');
+  const wrapperInputFakturManual = document.getElementById('wrapper-input-faktur-manual');
+  const inputFakturManual = document.getElementById('input-faktur-manual');
+
+  if (selectFakturBelanja) {
+    selectFakturBelanja.addEventListener('change', () => {
+      if (selectFakturBelanja.value === '__MANUAL__') {
+        if (wrapperInputFakturManual) wrapperInputFakturManual.classList.remove('hidden');
+        if (inputFakturManual) inputFakturManual.focus();
+      } else {
+        if (wrapperInputFakturManual) wrapperInputFakturManual.classList.add('hidden');
+      }
+    });
+  }
+
   catButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       selectedKategoriKeluar = btn.getAttribute('data-cat-keluar');
       if (selectedKategoriLabel) selectedKategoriLabel.textContent = selectedKategoriKeluar;
+
+      // Tampilkan kontainer faktur jika kategori belanja atau ongkir belanja
+      if (containerFakturBelanja) {
+        if (selectedKategoriKeluar === 'BIAYA BELANJA SEPATU' || selectedKategoriKeluar === 'BIAYA ONGKIR BELANJA') {
+          containerFakturBelanja.classList.remove('hidden');
+        } else {
+          const hasSelectedFaktur = selectFakturBelanja && selectFakturBelanja.value;
+          if (!hasSelectedFaktur) {
+            containerFakturBelanja.classList.add('hidden');
+          }
+        }
+      }
+
       catButtons.forEach((b) => {
         b.className = 'btn-cat-keluar p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all glass-chip-btn text-on-surface-variant';
         const id2 = b.querySelector('div:first-of-type');
@@ -1456,6 +1515,15 @@ export function initTambahTransaksiPage(router, store, params = {}) {
         const keteranganKeluar = (document.getElementById('input-keluar-keterangan') && document.getElementById('input-keluar-keterangan').value.trim()) || selectedKategoriKeluar;
         const dateInputKeluar = document.getElementById('input-trx-date-keluar');
         const trxDate = (dateInputKeluar && dateInputKeluar.value) ? dateInputKeluar.value : getLocalDateString();
+        let fakturNota = '';
+        if (selectFakturBelanja) {
+          if (selectFakturBelanja.value === '__MANUAL__') {
+            fakturNota = inputFakturManual ? inputFakturManual.value.trim() : '';
+          } else {
+            fakturNota = selectFakturBelanja.value.trim();
+          }
+        }
+
         const keluarData = {
           type: 'keluar',
           category: selectedKategoriKeluar,
@@ -1463,6 +1531,7 @@ export function initTambahTransaksiPage(router, store, params = {}) {
           amount,
           title: keteranganKeluar,
           keterangan: keteranganKeluar,
+          nota: fakturNota || (existingTrx ? existingTrx.nota : null),
           photo: keluarPhotoDataUrl || (existingTrx ? existingTrx.photo : null)
         };
         if (isEditMode) {
