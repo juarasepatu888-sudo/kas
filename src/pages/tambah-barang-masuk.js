@@ -239,6 +239,7 @@ export function renderTambahBarangMasukPage(store, params = {}) {
   const defaultSupplier = targetSupply ? targetSupply.supplierName : '';
   const defaultDate = targetSupply ? targetSupply.date : getLocalDateString();
   const defaultStatus = targetSupply ? targetSupply.status : 'pre-paid';
+  const belanjaFakturList = store.getBelanjaSepatuFakturList ? store.getBelanjaSepatuFakturList() : [];
 
   const cleanPrefix = (defaultSupplier || '').trim().toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9_-]/g, '') || 'BALL';
   const initialInvoicePreview = targetSupply ? targetSupply.invoiceNo : `${cleanPrefix}-${Math.floor(100 + Math.random() * 900)}`;
@@ -344,19 +345,47 @@ export function renderTambahBarangMasukPage(store, params = {}) {
               </span>
             </div>
             
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between">
-                <label class="font-label-sm text-xs text-on-surface-variant font-semibold">Ball</label>
+                <label class="font-label-sm text-xs text-on-surface-variant font-semibold flex items-center gap-1">
+                  <span>Ball / Faktur Belanja</span>
+                  ${(!isEdit && !isAppend && belanjaFakturList.length > 0) ? `<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 font-bold">List Kas Keluar</span>` : ''}
+                </label>
                 <span class="text-[10px] text-on-surface-variant font-mono">Faktur: <strong class="text-primary font-bold" id="text-faktur-preview">${initialInvoicePreview}</strong></span>
               </div>
-              <input 
-                type="text" 
-                id="input-suplier-name" 
-                placeholder="No Ball" 
-                value="${defaultSupplier}"
-                class="w-full px-3.5 py-2.5 rounded-xl glass-input text-on-surface font-body-md text-sm focus:outline-none focus:ring-2 focus:ring-on-tertiary-container font-semibold"
-                required
-              />
+
+              ${(!isEdit && !isAppend && belanjaFakturList.length > 0) ? `
+                <!-- Dropdown list faktur dari Kas Keluar Belanja Sepatu -->
+                <select id="select-ball-faktur" class="w-full px-3 py-2.5 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 font-semibold transition-all">
+                  <option value="">-- Pilih Faktur dari Kas Keluar Belanja Sepatu --</option>
+                  ${belanjaFakturList.map(f => `
+                    <option value="${f.nota}" data-date="${f.date}" data-amount="${f.amount}" data-title="${f.title}">
+                      ${f.nota} • Rp ${formatRupiah(f.amount, '')} • ${f.date} ${f.hasSupply ? '(Stok Sudah Ada)' : '(Menunggu Barang Tiba)'}
+                    </option>
+                  `).join('')}
+                  <option value="__MANUAL__">✍️ Ketik No. Ball Baru...</option>
+                </select>
+              ` : ''}
+
+              <!-- Input text manual jika dipilih __MANUAL__, mode edit, atau belum ada list kas keluar -->
+              <div id="wrapper-input-suplier-manual" class="${(!isEdit && !isAppend && belanjaFakturList.length > 0) ? 'hidden' : ''}">
+                <input 
+                  type="text" 
+                  id="input-suplier-name" 
+                  placeholder="Ketik No. Ball Baru (Contoh: BALL 01)" 
+                  value="${defaultSupplier}"
+                  class="w-full px-3.5 py-2.5 rounded-xl glass-input text-on-surface font-body-md text-sm focus:outline-none focus:ring-2 focus:ring-on-tertiary-container font-semibold"
+                />
+              </div>
+
+              <!-- Banner info saat faktur dipilih -->
+              <div id="banner-faktur-connected" class="hidden p-2 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-between text-[11px] text-blue-300">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="material-symbols-outlined text-[16px] text-blue-400 shrink-0">link</span>
+                  <span id="banner-faktur-text" class="truncate">Tersambung ke Kas Keluar</span>
+                </div>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 shrink-0">Auto Pre-Paid</span>
+              </div>
             </div>
 
             <div class="flex flex-col gap-1">
@@ -616,15 +645,84 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
   const inputSuplier = document.getElementById('input-suplier-name');
   const previewFakturBadge = document.getElementById('preview-invoice-no-badge');
   const previewFakturText = document.getElementById('text-faktur-preview');
+  const selectBallFaktur = document.getElementById('select-ball-faktur');
+  const wrapperInputSuplierManual = document.getElementById('wrapper-input-suplier-manual');
+  const bannerFakturConnected = document.getElementById('banner-faktur-connected');
+  const bannerFakturText = document.getElementById('banner-faktur-text');
+  const inputBelanjaDate = document.getElementById('input-belanja-date');
+  let selectedExactFaktur = null;
 
   function updateFakturPreview() {
     if (isEdit || isAppend) return;
+    if (selectedExactFaktur) {
+      if (previewFakturBadge) previewFakturBadge.textContent = selectedExactFaktur;
+      if (previewFakturText) previewFakturText.textContent = selectedExactFaktur;
+      return selectedExactFaktur;
+    }
     const val = inputSuplier ? inputSuplier.value : '';
     const prefix = cleanBallToPrefix(val);
     const faktur = `${prefix}-${randomSuffix3Digits}`;
     if (previewFakturBadge) previewFakturBadge.textContent = faktur;
     if (previewFakturText) previewFakturText.textContent = faktur;
     return faktur;
+  }
+
+  if (selectBallFaktur) {
+    selectBallFaktur.addEventListener('change', () => {
+      const val = selectBallFaktur.value;
+      if (val === '__MANUAL__') {
+        selectedExactFaktur = null;
+        if (wrapperInputSuplierManual) wrapperInputSuplierManual.classList.remove('hidden');
+        if (inputSuplier) {
+          inputSuplier.value = '';
+          inputSuplier.focus();
+        }
+        if (bannerFakturConnected) bannerFakturConnected.classList.add('hidden');
+        updateFakturPreview();
+      } else if (val) {
+        selectedExactFaktur = val;
+        if (wrapperInputSuplierManual) wrapperInputSuplierManual.classList.add('hidden');
+        if (inputSuplier) inputSuplier.value = val;
+
+        // Nomor faktur persis sama seperti di Kas Keluar!
+        if (previewFakturBadge) previewFakturBadge.textContent = val;
+        if (previewFakturText) previewFakturText.textContent = val;
+
+        // Ambil data tanggal & nominal dari option
+        const opt = selectBallFaktur.selectedOptions[0];
+        const dateVal = opt ? opt.getAttribute('data-date') : '';
+        const amtVal = opt ? opt.getAttribute('data-amount') : '0';
+        if (dateVal && inputBelanjaDate) {
+          inputBelanjaDate.value = dateVal;
+        }
+
+        // Tampilkan banner tersambung
+        if (bannerFakturConnected) {
+          bannerFakturConnected.classList.remove('hidden');
+          if (bannerFakturText) {
+            bannerFakturText.textContent = `Tersambung ke ${val} (Kas Keluar: Rp ${formatRupiah(Number(amtVal) || 0, '')})`;
+          }
+        }
+
+        // Otomatis pilih status 'pre-paid'
+        const prePaidRadio = document.querySelector('input[name="supplyStatus"][value="pre-paid"]');
+        if (prePaidRadio) {
+          prePaidRadio.checked = true;
+          document.querySelectorAll('.status-radio-opt').forEach((card) => {
+            card.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border glass-chip-btn text-on-surface-variant flex items-center gap-2';
+          });
+          const prePaidCard = prePaidRadio.closest('.status-radio-opt');
+          if (prePaidCard) {
+            prePaidCard.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border-2 border-blue-500 bg-blue-50 text-blue-700 flex items-center gap-2 w-full';
+          }
+        }
+      } else {
+        selectedExactFaktur = null;
+        if (wrapperInputSuplierManual) wrapperInputSuplierManual.classList.add('hidden');
+        if (bannerFakturConnected) bannerFakturConnected.classList.add('hidden');
+        updateFakturPreview();
+      }
+    });
   }
 
   if (inputSuplier && !isEdit && !isAppend) {
@@ -1442,15 +1540,20 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     }
 
     // KASUS 3: BUAT NOTA BELANJA BARU (Bisa Multi-Item)
-    const prefix = cleanBallToPrefix(suplier);
-    let belanjaNota = `${prefix}-${randomSuffix3Digits}`;
-
-    // Pastikan benar-benar unik di sistem
-    let attempts = 0;
-    while (existingInvSet.has(belanjaNota.toUpperCase()) && attempts < 100) {
-      randomSuffix3Digits = Math.floor(100 + Math.random() * 900);
+    let belanjaNota = '';
+    if (selectedExactFaktur) {
+      belanjaNota = selectedExactFaktur;
+    } else {
+      const prefix = cleanBallToPrefix(suplier);
       belanjaNota = `${prefix}-${randomSuffix3Digits}`;
-      attempts++;
+
+      // Pastikan benar-benar unik di sistem
+      let attempts = 0;
+      while (existingInvSet.has(belanjaNota.toUpperCase()) && attempts < 100) {
+        randomSuffix3Digits = Math.floor(100 + Math.random() * 900);
+        belanjaNota = `${prefix}-${randomSuffix3Digits}`;
+        attempts++;
+      }
     }
 
     store.addSupply({

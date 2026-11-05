@@ -21,9 +21,13 @@ Aplikasi buku kas digital untuk toko sepatu yang mengelola transaksi penjualan, 
    - Menambahkan filter dan badge `💳 Pre-Paid` di daftar belanja (`src/pages/barang-masuk-list.js`).
    - `store.js` & `store-migrations.js`: Status `pre-paid` memasukkan kuantitas stok tanpa memicu kas keluar ganda dan dikecualikan dari auto-reconcile kas keluar.
 2. **Penghubung Faktur Belanja pada Kas Keluar (`src/pages/tambah-transaksi.js`):**
-   - Saat memilih kategori `BIAYA BELANJA SEPATU` atau `BIAYA ONGKIR BELANJA`, form otomatis menampilkan dropdown *Faktur Belanja Terkait* (daftar faktur dari Barang Masuk) serta opsi input manual nomor faktur baru.
+   - Saat memilih kategori `BIAYA BELANJA SEPATU`, nomor faktur / ball **wajib diisi** sebagai acuan master.
+   - Saat memilih kategori `BIAYA ONGKIR BELANJA`, kolom faktur otomatis menampilkan breakdown list dropdown nomor faktur yang telah diinput di `BIAYA BELANJA SEPATU` (+ opsi ketik baru).
    - Disimpan pada field `nota` transaksi pengeluaran.
-3. **Laporan HPP Sepatu di Halaman Laporan (`src/pages/laporan.js` & `src/store/store.js`):**
+3. **Sinkronisasi Kolom Ball di Form Barang Masuk (`src/pages/tambah-barang-masuk.js`):**
+   - Kolom "Ball" menampilkan breakdown list faktur dari `BIAYA BELANJA SEPATU` (+ opsi 'Ketik No. Ball Baru').
+   - Jika faktur dipilih: otomatis menggunakan nomor faktur persis tanpa suffix acak, otomatis memilih status `💳 Pre-Paid`, tanggal & nominal belanja otomatis tersambung.
+4. **Laporan HPP Sepatu di Halaman Laporan (`src/pages/laporan.js` & `src/store/store.js`):**
    - Method baru `store.getHppReports(filterFaktur)`: Menghitung belanja sepatu + ongkir belanja per faktur dan membaginya dengan total pasang sepatu. Mendeteksi pula transaksi pending sebelum stok diinput.
    - Widget Laporan HPP interaktif:
      - 4 KPI: HPP Rata-Rata/Psg, Total Belanja Pokok, Total Ongkir Belanja, Total Pasang Sepatu.

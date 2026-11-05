@@ -1856,6 +1856,63 @@ class Store {
     };
   }
 
+  /**
+   * Mengambil daftar nomor faktur yang telah diinput pada 'BIAYA BELANJA SEPATU'
+   * Digunakan untuk breakdown pilihan faktur pada BIAYA ONGKIR BELANJA dan kolom BALL pada DATA BARANG MASUK.
+   * @returns {Array<{nota: string, date: string, amount: number, title: string, hasSupply: boolean}>}
+   */
+  getBelanjaSepatuFakturList() {
+    const transactions = Array.isArray(this.state.transactions) ? this.state.transactions : [];
+    const supplies = Array.isArray(this.state.supplies) ? this.state.supplies : [];
+
+    const supplyInvoiceSet = new Set(supplies.map((s) => (s.invoiceNo || '').trim().toUpperCase()));
+    const map = new Map();
+
+    // 1. Ambil dari transaksi kas keluar kategori BIAYA BELANJA SEPATU (dan variasinya)
+    transactions.forEach((t) => {
+      if (t.type !== 'keluar') return;
+      const cat = (t.category || '').toUpperCase();
+      const isBelanja = cat === 'BIAYA BELANJA SEPATU' || cat === 'BELANJA BARANG' || cat === 'BELANJA';
+      if (!isBelanja) return;
+
+      const nota = (t.nota || '').trim();
+      if (!nota) return;
+      const key = nota.toUpperCase();
+
+      if (!map.has(key)) {
+        map.set(key, {
+          nota: nota,
+          date: t.date || '',
+          amount: Number(t.amount) || 0,
+          title: t.title || t.keterangan || 'Biaya Belanja Sepatu',
+          hasSupply: supplyInvoiceSet.has(key)
+        });
+      } else {
+        const item = map.get(key);
+        item.amount += (Number(t.amount) || 0);
+        if (t.date && t.date > item.date) item.date = t.date;
+      }
+    });
+
+    // 2. Tambahkan juga nomor faktur dari supplies yang belum ada di map
+    supplies.forEach((s) => {
+      const inv = (s.invoiceNo || '').trim();
+      if (!inv) return;
+      const key = inv.toUpperCase();
+      if (!map.has(key)) {
+        map.set(key, {
+          nota: inv,
+          date: s.date || '',
+          amount: Number(s.totalAmount) || 0,
+          title: `Belanja ${s.supplierName || 'Suplier'} (${s.itemsCount || 1} psg)`,
+          hasSupply: true
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }
+
   // Reset / Bersihkan Data
   /**
    * Hapus HANYA record contoh (dummy) bawaan aplikasi, berdasarkan ID/barcode persis.

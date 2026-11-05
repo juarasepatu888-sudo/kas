@@ -131,6 +131,7 @@ export function renderTambahTransaksiPage(store, params = {}) {
   const defaultDate = existingTrx ? (existingTrx.date || getLocalDateString()) : getLocalDateString();
   const defaultNota = existingTrx ? (existingTrx.nota || '') : '';
   const supplies = store.getSupplies ? store.getSupplies() : [];
+  const belanjaFakturList = store.getBelanjaSepatuFakturList ? store.getBelanjaSepatuFakturList() : [];
   const totalItemsPrice = initialItems.reduce((s, it) => s + (Number(it.price) || 0), 0);
 
   return `
@@ -252,31 +253,51 @@ export function renderTambahTransaksiPage(store, params = {}) {
             </div>
           </div>
 
-          <!-- Input Faktur Belanja Terkait (Untuk Hitung HPP di Laporan) -->
-          <div id="container-faktur-belanja" class="${(defaultCategory === 'BIAYA BELANJA SEPATU' || defaultCategory === 'BIAYA ONGKIR BELANJA' || defaultNota) ? '' : 'hidden'} glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-2 border border-primary/25">
+          <!-- Input Wajib No. Faktur / Ball untuk BIAYA BELANJA SEPATU -->
+          <div id="container-faktur-wajib-belanja" class="${defaultCategory === 'BIAYA BELANJA SEPATU' ? '' : 'hidden'} glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-2 border border-rose-500/35">
+            <div class="flex items-center justify-between">
+              <label class="font-label-md text-xs text-rose-950 font-bold flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[18px] text-rose-700">receipt_long</span>
+                <span>Nomor Faktur / Ball</span>
+                <span class="text-rose-600 font-bold">*Wajib Diisi</span>
+              </label>
+              <span class="font-label-sm text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold uppercase tracking-wider">Acuan Faktur</span>
+            </div>
+            <p class="text-[11px] text-on-surface-variant leading-tight">
+              Nomor faktur ini menjadi acuan utama untuk biaya ongkir belanja dan data barang masuk (stok).
+            </p>
+            <input 
+              type="text" 
+              id="input-faktur-belanja-wajib" 
+              placeholder="Contoh: BALL-01 atau FAK-519" 
+              value="${defaultCategory === 'BIAYA BELANJA SEPATU' ? defaultNota : ''}" 
+              class="w-full px-3.5 py-2.5 rounded-xl glass-input text-on-surface font-body-md text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold tracking-wide transition-all" 
+            />
+          </div>
+
+          <!-- Input Pilihan Faktur Belanja untuk BIAYA ONGKIR BELANJA -->
+          <div id="container-faktur-ongkir" class="${defaultCategory === 'BIAYA ONGKIR BELANJA' ? '' : 'hidden'} glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-2 border border-primary/25">
             <div class="flex items-center justify-between">
               <label class="font-label-md text-xs text-primary font-bold flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-[18px]">receipt_long</span>
-                <span>Faktur Belanja Terkait (Hitung HPP)</span>
+                <span class="material-symbols-outlined text-[18px]">local_shipping</span>
+                <span>Faktur Belanja Terkait (Ongkir)</span>
               </label>
               <span class="font-label-sm text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold uppercase tracking-wider">HPP</span>
             </div>
             <p class="text-[11px] text-on-surface-variant leading-tight">
-              Pilih nota belanja agar biaya belanja & ongkir ini otomatis dihitung ke <strong>HPP per pasang</strong> di Laporan.
+              Pilih dari daftar faktur belanja sepatu yang sudah diinput sebelumnya agar ongkir ini terhitung otomatis di HPP.
             </p>
-            <select id="select-faktur-belanja" class="w-full px-3 py-2 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all">
-              <option value="">-- Pilih Faktur Belanja / Suplier --</option>
-              ${supplies.map((s) => {
-                const sInv = s.invoiceNo || '';
-                const isSelected = defaultNota && (defaultNota.toUpperCase() === sInv.toUpperCase());
-                const count = s.itemsCount || (Array.isArray(s.items) ? s.items.length : 1);
-                return `<option value="${sInv}" ${isSelected ? 'selected' : ''}>${sInv} • ${s.supplierName || 'Suplier'} (${count} psg)</option>`;
+            <select id="select-faktur-ongkir" class="w-full px-3 py-2 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 font-semibold transition-all">
+              <option value="">-- Pilih Faktur Belanja Sepatu --</option>
+              ${belanjaFakturList.map((f) => {
+                const isSelected = defaultNota && (defaultNota.toUpperCase() === f.nota.toUpperCase());
+                return `<option value="${f.nota}" ${isSelected ? 'selected' : ''}>${f.nota} • Rp ${formatRupiah(f.amount, '')} • ${f.date}</option>`;
               }).join('')}
-              <option value="__MANUAL__" ${defaultNota && !supplies.some(s => (s.invoiceNo || '').toUpperCase() === defaultNota.toUpperCase()) ? 'selected' : ''}>✍️ Ketik Nomor Faktur Baru / Lainnya...</option>
+              <option value="__MANUAL__" ${defaultNota && !belanjaFakturList.some(f => f.nota.toUpperCase() === defaultNota.toUpperCase()) ? 'selected' : ''}>✍️ Ketik Nomor Faktur Baru / Lainnya...</option>
             </select>
-            <div id="wrapper-input-faktur-manual" class="${(defaultNota && !supplies.some(s => (s.invoiceNo || '').toUpperCase() === defaultNota.toUpperCase())) ? '' : 'hidden'} flex flex-col gap-1 mt-1">
-              <input type="text" id="input-faktur-manual" placeholder="Contoh: BALL-519 atau FAK-PASOK-001" value="${defaultNota}" class="w-full px-3 py-2 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all" />
-              <span class="text-[10px] text-on-surface-variant">Ketik nomor faktur jika barang baru akan diinput saat paket tiba</span>
+            <div id="wrapper-input-faktur-ongkir-manual" class="${(defaultNota && !belanjaFakturList.some(f => f.nota.toUpperCase() === defaultNota.toUpperCase())) ? '' : 'hidden'} flex flex-col gap-1 mt-1">
+              <input type="text" id="input-faktur-ongkir-manual" placeholder="Contoh: BALL-01 atau FAK-519" value="${defaultCategory === 'BIAYA ONGKIR BELANJA' ? defaultNota : ''}" class="w-full px-3 py-2 rounded-xl glass-input text-on-surface font-body-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-semibold" />
+              <span class="text-[10px] text-on-surface-variant">Ketik nomor faktur jika belum tercatat di daftar belanja</span>
             </div>
           </div>
  <div class="glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-1.5">
@@ -993,18 +1014,20 @@ export function initTambahTransaksiPage(router, store, params = {}) {
 
   const selectedKategoriLabel = document.getElementById('selected-kategori-label');
   const catButtons = document.querySelectorAll('.btn-cat-keluar');
-  const containerFakturBelanja = document.getElementById('container-faktur-belanja');
-  const selectFakturBelanja = document.getElementById('select-faktur-belanja');
-  const wrapperInputFakturManual = document.getElementById('wrapper-input-faktur-manual');
-  const inputFakturManual = document.getElementById('input-faktur-manual');
+  const containerFakturWajib = document.getElementById('container-faktur-wajib-belanja');
+  const inputFakturWajib = document.getElementById('input-faktur-belanja-wajib');
+  const containerFakturOngkir = document.getElementById('container-faktur-ongkir');
+  const selectFakturOngkir = document.getElementById('select-faktur-ongkir');
+  const wrapperInputFakturOngkirManual = document.getElementById('wrapper-input-faktur-ongkir-manual');
+  const inputFakturOngkirManual = document.getElementById('input-faktur-ongkir-manual');
 
-  if (selectFakturBelanja) {
-    selectFakturBelanja.addEventListener('change', () => {
-      if (selectFakturBelanja.value === '__MANUAL__') {
-        if (wrapperInputFakturManual) wrapperInputFakturManual.classList.remove('hidden');
-        if (inputFakturManual) inputFakturManual.focus();
+  if (selectFakturOngkir) {
+    selectFakturOngkir.addEventListener('change', () => {
+      if (selectFakturOngkir.value === '__MANUAL__') {
+        if (wrapperInputFakturOngkirManual) wrapperInputFakturOngkirManual.classList.remove('hidden');
+        if (inputFakturOngkirManual) inputFakturOngkirManual.focus();
       } else {
-        if (wrapperInputFakturManual) wrapperInputFakturManual.classList.add('hidden');
+        if (wrapperInputFakturOngkirManual) wrapperInputFakturOngkirManual.classList.add('hidden');
       }
     });
   }
@@ -1014,16 +1037,19 @@ export function initTambahTransaksiPage(router, store, params = {}) {
       selectedKategoriKeluar = btn.getAttribute('data-cat-keluar');
       if (selectedKategoriLabel) selectedKategoriLabel.textContent = selectedKategoriKeluar;
 
-      // Tampilkan kontainer faktur jika kategori belanja atau ongkir belanja
-      if (containerFakturBelanja) {
-        if (selectedKategoriKeluar === 'BIAYA BELANJA SEPATU' || selectedKategoriKeluar === 'BIAYA ONGKIR BELANJA') {
-          containerFakturBelanja.classList.remove('hidden');
-        } else {
-          const hasSelectedFaktur = selectFakturBelanja && selectFakturBelanja.value;
-          if (!hasSelectedFaktur) {
-            containerFakturBelanja.classList.add('hidden');
-          }
+      // Toggle container faktur sesuai kategori pengeluaran
+      if (selectedKategoriKeluar === 'BIAYA BELANJA SEPATU') {
+        if (containerFakturWajib) containerFakturWajib.classList.remove('hidden');
+        if (containerFakturOngkir) containerFakturOngkir.classList.add('hidden');
+        if (inputFakturWajib && !inputFakturWajib.value) {
+          setTimeout(() => inputFakturWajib.focus(), 150);
         }
+      } else if (selectedKategoriKeluar === 'BIAYA ONGKIR BELANJA') {
+        if (containerFakturWajib) containerFakturWajib.classList.add('hidden');
+        if (containerFakturOngkir) containerFakturOngkir.classList.remove('hidden');
+      } else {
+        if (containerFakturWajib) containerFakturWajib.classList.add('hidden');
+        if (containerFakturOngkir) containerFakturOngkir.classList.add('hidden');
       }
 
       catButtons.forEach((b) => {
@@ -1516,11 +1542,21 @@ export function initTambahTransaksiPage(router, store, params = {}) {
         const dateInputKeluar = document.getElementById('input-trx-date-keluar');
         const trxDate = (dateInputKeluar && dateInputKeluar.value) ? dateInputKeluar.value : getLocalDateString();
         let fakturNota = '';
-        if (selectFakturBelanja) {
-          if (selectFakturBelanja.value === '__MANUAL__') {
-            fakturNota = inputFakturManual ? inputFakturManual.value.trim() : '';
-          } else {
-            fakturNota = selectFakturBelanja.value.trim();
+        if (selectedKategoriKeluar === 'BIAYA BELANJA SEPATU') {
+          const valWajib = inputFakturWajib ? inputFakturWajib.value.trim() : '';
+          if (!valWajib) {
+            showToast('Nomor Faktur / Ball WAJIB diisi untuk Biaya Belanja Sepatu!', 'error');
+            if (inputFakturWajib) inputFakturWajib.focus();
+            return;
+          }
+          fakturNota = valWajib;
+        } else if (selectedKategoriKeluar === 'BIAYA ONGKIR BELANJA') {
+          if (selectFakturOngkir) {
+            if (selectFakturOngkir.value === '__MANUAL__') {
+              fakturNota = inputFakturOngkirManual ? inputFakturOngkirManual.value.trim() : '';
+            } else {
+              fakturNota = selectFakturOngkir.value.trim();
+            }
           }
         }
 
