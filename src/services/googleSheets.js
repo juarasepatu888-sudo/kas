@@ -259,14 +259,16 @@ async function applyDashboardDesignAndCharts(token, spreadsheetId, meta = {}) {
       }
     });
 
-    // 1. Delete existing charts to prevent accumulation
-    if (dashSheet.charts && dashSheet.charts.length > 0) {
-      dashSheet.charts.forEach((c) => {
-        if (c.chartId !== undefined) {
-          requests.push({ deleteEmbeddedObject: { objectId: c.chartId } });
-        }
+    // 1. Kunci Posisi 4 Diagram Dashboard: JANGAN hapus diagram yang sudah ada
+    // Dengan mempertahankan chartId dan hanya memanggil updateChartSpec, posisi & ukuran
+    // diagram yang sudah diatur/dirapikan pengguna di Google Sheets TERKUNCI PERMANEN dan tidak akan berpindah.
+    const existingCharts = dashSheet.charts || [];
+    const findChartByTitle = (titleKey) => {
+      return existingCharts.find((c) => {
+        const title = (c.spec?.title || '').toLowerCase();
+        return title.includes(titleKey.toLowerCase());
       });
-    }
+    };
 
     // 2. Posisi & Lebar Kolom: DIKUNCI SESUAI SETTINGAN PENGGUNA SAAT INI
     // JANGAN timpa ukuran lebar kolom (COLUMNS) agar tata letak
@@ -611,86 +613,148 @@ async function applyDashboardDesignAndCharts(token, spreadsheetId, meta = {}) {
     });
 
     // 14. Chart 1: Arus Kas (Column - Top Left)
-    requests.push({
-      addChart: { chart: {
-        spec: { title: 'Perbandingan Arus Kas', basicChart: {
-          chartType: 'COLUMN', legendPosition: 'NO_LEGEND',
-          domains: [{ domain: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: 9, endRowIndex: 11, startColumnIndex: 0, endColumnIndex: 1 }] } } }],
-          series: [{ series: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: 9, endRowIndex: 11, startColumnIndex: 1, endColumnIndex: 2 }] } }, targetAxis: 'LEFT_AXIS' }]
-        }},
-        position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 6, columnIndex: 5 }, widthPixels: 420, heightPixels: 250 } }
-      }}
-    });
+    const chart1Spec = {
+      title: 'Perbandingan Arus Kas',
+      basicChart: {
+        chartType: 'COLUMN', legendPosition: 'NO_LEGEND',
+        domains: [{ domain: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: 9, endRowIndex: 11, startColumnIndex: 0, endColumnIndex: 1 }] } } }],
+        series: [{ series: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: 9, endRowIndex: 11, startColumnIndex: 1, endColumnIndex: 2 }] } }, targetAxis: 'LEFT_AXIS' }]
+      }
+    };
+    const existingChart1 = findChartByTitle('Arus Kas');
+    if (existingChart1 && existingChart1.chartId !== undefined) {
+      requests.push({
+        updateChartSpec: {
+          chartId: existingChart1.chartId,
+          spec: chart1Spec
+        }
+      });
+    } else {
+      requests.push({
+        addChart: {
+          chart: {
+            spec: chart1Spec,
+            position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 6, columnIndex: 5 }, widthPixels: 420, heightPixels: 250 } }
+          }
+        }
+      });
+    }
 
-    // 15. Chart 2: Komposisi Stok (Donut - Top Right) — gunakan meta.komposisiStartRowIndex
+    // 15. Chart 2: Komposisi Stok (Donut - Top Right)
     const komposisiStart = meta.komposisiStartRowIndex || 35;
-    requests.push({
-      addChart: { chart: {
-        spec: { title: 'Komposisi Stok Sepatu', pieChart: {
-          legendPosition: 'RIGHT_LEGEND', pieHole: 0.5,
-          domain: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: komposisiStart, endRowIndex: komposisiStart + 2, startColumnIndex: 0, endColumnIndex: 1 }] } },
-          series: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: komposisiStart, endRowIndex: komposisiStart + 2, startColumnIndex: 1, endColumnIndex: 2 }] } }
-        }},
-        position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 6, columnIndex: 11 }, widthPixels: 380, heightPixels: 250 } }
-      }}
-    });
+    const chart2Spec = {
+      title: 'Komposisi Stok Sepatu',
+      pieChart: {
+        legendPosition: 'RIGHT_LEGEND', pieHole: 0.5,
+        domain: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: komposisiStart, endRowIndex: komposisiStart + 2, startColumnIndex: 0, endColumnIndex: 1 }] } },
+        series: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: komposisiStart, endRowIndex: komposisiStart + 2, startColumnIndex: 1, endColumnIndex: 2 }] } }
+      }
+    };
+    const existingChart2 = findChartByTitle('Komposisi Stok');
+    if (existingChart2 && existingChart2.chartId !== undefined) {
+      requests.push({
+        updateChartSpec: {
+          chartId: existingChart2.chartId,
+          spec: chart2Spec
+        }
+      });
+    } else {
+      requests.push({
+        addChart: {
+          chart: {
+            spec: chart2Spec,
+            position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 6, columnIndex: 11 }, widthPixels: 380, heightPixels: 250 } }
+          }
+        }
+      });
+    }
 
     // 16. Chart 3: Pengeluaran per Kategori (Donut - Bottom Left)
     if (meta.catStartRowIndex && meta.catRowCount > 0) {
-      requests.push({
-        addChart: { chart: {
-          spec: { title: 'Pengeluaran Kas per Kategori', pieChart: {
-            legendPosition: 'RIGHT_LEGEND', pieHole: 0.5,
-            domain: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: meta.catStartRowIndex, endRowIndex: meta.catStartRowIndex + meta.catRowCount, startColumnIndex: 0, endColumnIndex: 1 }] } },
-            series: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: meta.catStartRowIndex, endRowIndex: meta.catStartRowIndex + meta.catRowCount, startColumnIndex: 1, endColumnIndex: 2 }] } }
-          }},
-          position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 20, columnIndex: 5 }, widthPixels: 420, heightPixels: 260 } }
-        }}
-      });
+      const chart3Spec = {
+        title: 'Pengeluaran Kas per Kategori',
+        pieChart: {
+          legendPosition: 'RIGHT_LEGEND', pieHole: 0.5,
+          domain: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: meta.catStartRowIndex, endRowIndex: meta.catStartRowIndex + meta.catRowCount, startColumnIndex: 0, endColumnIndex: 1 }] } },
+          series: { sourceRange: { sources: [{ sheetId: dashSheetId, startRowIndex: meta.catStartRowIndex, endRowIndex: meta.catStartRowIndex + meta.catRowCount, startColumnIndex: 1, endColumnIndex: 2 }] } }
+        }
+      };
+      const existingChart3 = findChartByTitle('Pengeluaran');
+      if (existingChart3 && existingChart3.chartId !== undefined) {
+        requests.push({
+          updateChartSpec: {
+            chartId: existingChart3.chartId,
+            spec: chart3Spec
+          }
+        });
+      } else {
+        requests.push({
+          addChart: {
+            chart: {
+              spec: chart3Spec,
+              position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 20, columnIndex: 5 }, widthPixels: 420, heightPixels: 260 } }
+            }
+          }
+        });
+      }
     }
+
     // 17. Chart 4: Statistik Penjualan Hari ke Hari (Line Chart — referensi sheet 'Statistik Harian')
     const statSheet = sheetData.sheets?.find((s) => s.properties?.title === 'Statistik Harian');
     if (statSheet) {
       const statSheetId = statSheet.properties?.sheetId;
       const dataRowCount = meta.statistikHarianRowCount || 1;
-      requests.push({
-        addChart: { chart: {
-          spec: {
-            title: '📈 Statistik Penjualan Hari ke Hari',
-            titleTextFormat: { bold: true, fontSize: 11 },
-            basicChart: {
-              chartType: 'LINE',
-              legendPosition: 'BOTTOM_LEGEND',
-              headerCount: 1,
-              domains: [{ domain: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 1, endColumnIndex: 2 }] } } }],
-              series: [
-                {
-                  series: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 2, endColumnIndex: 3 }] } },
-                  targetAxis: 'LEFT_AXIS',
-                  color: { red: 0.06, green: 0.72, blue: 0.50 }
-                },
-                {
-                  series: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 4, endColumnIndex: 5 }] } },
-                  targetAxis: 'LEFT_AXIS',
-                  color: { red: 0.88, green: 0.20, blue: 0.25 }
-                },
-                {
-                  series: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 5, endColumnIndex: 6 }] } },
-                  targetAxis: 'RIGHT_AXIS',
-                  color: { red: 0.98, green: 0.75, blue: 0.20 }
-                }
-              ],
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Tanggal' },
-                { position: 'LEFT_AXIS', title: 'Nominal (Rp)' },
-                { position: 'RIGHT_AXIS', title: 'Sepatu Laku (Psg)' }
-              ]
+      const chart4Spec = {
+        title: '📈 Statistik Penjualan Hari ke Hari',
+        titleTextFormat: { bold: true, fontSize: 11 },
+        basicChart: {
+          chartType: 'LINE',
+          legendPosition: 'BOTTOM_LEGEND',
+          headerCount: 1,
+          domains: [{ domain: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 1, endColumnIndex: 2 }] } } }],
+          series: [
+            {
+              series: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 2, endColumnIndex: 3 }] } },
+              targetAxis: 'LEFT_AXIS',
+              color: { red: 0.06, green: 0.72, blue: 0.50 }
+            },
+            {
+              series: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 4, endColumnIndex: 5 }] } },
+              targetAxis: 'LEFT_AXIS',
+              color: { red: 0.88, green: 0.20, blue: 0.25 }
+            },
+            {
+              series: { sourceRange: { sources: [{ sheetId: statSheetId, startRowIndex: 0, endRowIndex: 1 + dataRowCount, startColumnIndex: 5, endColumnIndex: 6 }] } },
+              targetAxis: 'RIGHT_AXIS',
+              color: { red: 0.98, green: 0.75, blue: 0.20 }
             }
-          },
-          position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 20, columnIndex: 11 }, widthPixels: 420, heightPixels: 260 } }
-        }}
-      });
-
+          ],
+          axis: [
+            { position: 'BOTTOM_AXIS', title: 'Tanggal' },
+            { position: 'LEFT_AXIS', title: 'Nominal (Rp)' },
+            { position: 'RIGHT_AXIS', title: 'Sepatu Laku (Psg)' }
+          ]
+        }
+      };
+      const existingChart4 = findChartByTitle('Statistik Penjualan');
+      if (existingChart4 && existingChart4.chartId !== undefined) {
+        requests.push({
+          updateChartSpec: {
+            chartId: existingChart4.chartId,
+            spec: chart4Spec
+          }
+        });
+      } else {
+        requests.push({
+          addChart: {
+            chart: {
+              spec: chart4Spec,
+              position: { overlayPosition: { anchorCell: { sheetId: dashSheetId, rowIndex: 20, columnIndex: 11 }, widthPixels: 420, heightPixels: 260 } }
+            }
+          }
+        });
+      }
+    
       // Styling untuk Sheet 'Statistik Harian'
       const count = meta.statistikHarianRowCount || 1;
       requests.push({

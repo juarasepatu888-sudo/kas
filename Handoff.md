@@ -54,6 +54,15 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 
 ---
 
+### 5. Penguncian Posisi 4 Diagram di Sheet Dashboard Google Sheets
+- **Masalah:** Sebelumnya setiap kali sinkronisasi berjalan, sistem menghapus semua diagram (`deleteEmbeddedObject`) lalu membuat ulang diagram baru (`addChart`) dengan koordinat hardcoded. Akibatnya, posisi atau ukuran 4 diagram yang sudah ditata rapi oleh pengguna kembali ter-reset dan berpindah posisi.
+- **Perbaikan:**
+  1. Menghapus perintah penghapusan diagram (`deleteEmbeddedObject`).
+  2. Mengimplementasikan pengecekan `findChartByTitle`: jika diagram (*Perbandingan Arus Kas*, *Komposisi Stok Sepatu*, *Pengeluaran Kas per Kategori*, *Statistik Penjualan Hari ke Hari*) sudah ada di sheet, sistem hanya memperbarui data dan spesifikasinya via `updateChartSpec` dengan mempertahankan `chartId` aslinya.
+- **Hasil:** Posisi, ukuran, dan tata letak 4 diagram di sheet Dashboard **TERKUNCI PERMANEN** di tempat pengguna meletakkannya. Diagram akan memperbarui grafik dan angkanya secara otomatis saat data bertambah/berubah tanpa pernah bergeser atau berpindah posisi lagi.
+
+---
+
 ## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)
