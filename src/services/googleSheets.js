@@ -268,24 +268,10 @@ async function applyDashboardDesignAndCharts(token, spreadsheetId, meta = {}) {
       });
     }
 
-    // 2. Column widths for Dark Modern Card layout
-    const colWidths = [
-      { col: 0, size: 220 }, { col: 1, size: 155 }, { col: 2, size: 170 },
-      { col: 3, size: 155 }, { col: 4, size: 20 },  { col: 5, size: 85 },
-      { col: 6, size: 85 },  { col: 7, size: 85 },  { col: 8, size: 85 },
-      { col: 9, size: 85 },  { col: 10, size: 18 }, { col: 11, size: 85 },
-      { col: 12, size: 85 }, { col: 13, size: 85 }, { col: 14, size: 85 },
-      { col: 15, size: 85 }
-    ];
-    colWidths.forEach(({ col, size }) => {
-      requests.push({
-        updateDimensionProperties: {
-          range: { sheetId: dashSheetId, dimension: 'COLUMNS', startIndex: col, endIndex: col + 1 },
-          properties: { pixelSize: size },
-          fields: 'pixelSize'
-        }
-      });
-    });
+    // 2. Posisi & Lebar Kolom: DIKUNCI SESUAI SETTINGAN PENGGUNA SAAT INI
+    // JANGAN timpa ukuran lebar kolom (COLUMNS) agar tata letak
+    // yang sudah dirapikan pengguna di Google Spreadsheet tidak kembali bertabrakan / bergeser.
+    // requests updateDimensionProperties untuk kolom dinonaktifkan demi mempertahankan settingan terkini.
 
     // 3. Row heights for modern spacing
     const rowHeights = [
@@ -760,16 +746,7 @@ async function applyDashboardDesignAndCharts(token, spreadsheetId, meta = {}) {
           fields: 'userEnteredFormat(backgroundColor,textFormat,borders)'
         }
       });
-      const colWidths = [50, 110, 150, 150, 140, 120, 150];
-      colWidths.forEach((w, idx) => {
-        requests.push({
-          updateDimensionProperties: {
-            range: { sheetId: statSheetId, dimension: 'COLUMNS', startIndex: idx, endIndex: idx + 1 },
-            properties: { pixelSize: w },
-            fields: 'pixelSize'
-          }
-        });
-      });
+      // Lebar kolom Statistik Harian: dipertahankan sesuai settingan pengguna saat ini
     }
 
 
