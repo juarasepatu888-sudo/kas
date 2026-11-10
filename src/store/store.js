@@ -209,10 +209,46 @@ class Store {
     if (!data || !Array.isArray(data.supplies) || !Array.isArray(data.transactions)) return false;
     let changed = false;
 
+    // Himpun nota yang telah dicatat manual di Kas Keluar ('BIAYA BELANJA SEPATU')
+    const prepaidNotaSet = new Set(
+      data.transactions
+        .filter((t) => t.type === 'keluar' && (
+          (t.category || '').toUpperCase().includes('BELANJA SEPATU') ||
+          (t.category || '').toUpperCase() === 'BIAYA BELANJA SEPATU'
+        ))
+        .map((t) => (t.nota || '').trim().toUpperCase())
+        .filter(Boolean)
+    );
+
     data.supplies.forEach((s) => {
-      if (s.status !== 'lunas') return; // 'tempo' dan 'pre-paid' dilewati — tidak perlu rekonsiliasi kas keluar
       const invNo = (s.invoiceNo || '').trim();
       if (!invNo) return;
+      const isPrepaidByTrx = prepaidNotaSet.has(invNo.toUpperCase());
+
+      // Jika faktur ini adalah pre-paid atau tersambung ke kas keluar BIAYA BELANJA SEPATU:
+      if (s.status === 'pre-paid' || isPrepaidByTrx) {
+        if (s.status !== 'pre-paid') {
+          s.status = 'pre-paid';
+          changed = true;
+        }
+        // Bersihkan transaksi kas keluar duplikat 'Belanja Barang' / 'Tambah Belanja' yang pernah terbuat otomatis
+        const prevTrxCount = data.transactions.length;
+        data.transactions = data.transactions.filter((t) => {
+          if (t.type === 'keluar' && ((t.nota || '').trim().toUpperCase() === invNo.toUpperCase())) {
+            const cat = (t.category || '').trim();
+            if (cat === 'Belanja Barang' || cat === 'Belanja' || (t.title || '').startsWith('Tambah Belanja:')) {
+              return false;
+            }
+          }
+          return true;
+        });
+        if (data.transactions.length !== prevTrxCount) {
+          changed = true;
+        }
+        return; // Pre-paid: TIDAK PERNAH membuat kas keluar otomatis
+      }
+
+      if (s.status !== 'lunas') return; // 'tempo' dilewati — tidak perlu rekonsiliasi kas keluar
 
       const expectedTotal = Number(s.totalAmount) || 0;
       if (expectedTotal <= 0) return;
@@ -221,7 +257,7 @@ class Store {
       const existingTrxs = data.transactions.filter(
         (t) => t.type === 'keluar' &&
           (t.category === 'Belanja Barang' || t.category === 'Belanja') &&
-          ((t.nota || '').trim() === invNo)
+          ((t.nota || '').trim().toUpperCase() === invNo.toUpperCase())
       );
 
       const existingTotal = existingTrxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -231,7 +267,7 @@ class Store {
         if (s.items && Array.isArray(s.items) && s.items.length > 0) {
           // Hapus transaksi parsial faktur ini dan bangun ulang secara akurat per-item
           data.transactions = data.transactions.filter(
-            (t) => !(t.type === 'keluar' && (t.category === 'Belanja Barang' || t.category === 'Belanja') && ((t.nota || '').trim() === invNo))
+            (t) => !(t.type === 'keluar' && (t.category === 'Belanja Barang' || t.category === 'Belanja') && ((t.nota || '').trim().toUpperCase() === invNo.toUpperCase()))
           );
 
           s.items.forEach((it, idx) => {
@@ -954,7 +990,16 @@ class Store {
     // If paid immediately (lunas), also record a cash out transaction!
     // 'pre-paid' = sudah dibayar sebelumnya (via kas keluar manual) → stok masuk, kas TIDAK dipotong lagi
     // 'tempo'    = bayar nanti ke supplier → stok masuk, kas TIDAK dipotong sekarang
-    if (supply.status === 'lunas' && supply.recordTransaction !== false) {
+    const isAlreadyPrepaid = (this.state.transactions || []).some(
+      (t) => t.type === 'keluar' &&
+        ((t.category || '').toUpperCase().includes('BELANJA SEPATU') || (t.category || '').toUpperCase() === 'BIAYA BELANJA SEPATU') &&
+        (t.nota || '').trim().toUpperCase() === (newSupply.invoiceNo || '').trim().toUpperCase()
+    );
+    if (isAlreadyPrepaid) {
+      newSupply.status = 'pre-paid';
+    }
+
+    if (newSupply.status === 'lunas' && supply.recordTransaction !== false && !isAlreadyPrepaid) {
       this.addTransaction({
         type: 'keluar',
         category: 'Belanja Barang',
@@ -1018,11 +1063,17 @@ class Store {
         });
       }
 
-      // Sync transaction kas keluar jika ada
-      const existingNota = existing.invoiceNo;
-      if (existingNota && updatedData.totalAmount !== undefined) {
+      // Sync transaction kas keluar jika ada (HANYA untuk status 'lunas' dan kategori 'Belanja Barang'/'Belanja')
+      // Pre-paid & Tempo TIDAK PERNAH memodifikasi kas keluar
+      const existingNota = (existing.invoiceNo || '').trim().toUpperCase();
+      const targetStatus = updatedData.status || existing.status;
+      if (existingNota && updatedData.totalAmount !== undefined && targetStatus === 'lunas') {
         const trxs = this.state.transactions || [];
-        const relatedTrx = trxs.find((t) => t.type === 'keluar' && t.nota === existingNota);
+        const relatedTrx = trxs.find(
+          (t) => t.type === 'keluar' &&
+            (t.category === 'Belanja Barang' || t.category === 'Belanja') &&
+            (t.nota || '').trim().toUpperCase() === existingNota
+        );
         if (relatedTrx) {
           relatedTrx.amount = Number(updatedData.totalAmount) || 0;
           if (updatedData.supplierName) {
@@ -1046,12 +1097,30 @@ class Store {
     const idx = this.state.supplies.findIndex((s) => s.id === id);
     if (idx === -1) return null;
     const existing = this.state.supplies[idx];
+    const invNo = (existing.invoiceNo || '').trim().toUpperCase();
+
+    // Cek apakah faktur terhubung ke Kas Keluar BIAYA BELANJA SEPATU
+    const isPrepaidByTrx = invNo && (this.state.transactions || []).some(
+      (t) => t.type === 'keluar' && 
+        ((t.category || '').toUpperCase().includes('BELANJA SEPATU') || (t.category || '').toUpperCase() === 'BIAYA BELANJA SEPATU') &&
+        (t.nota || '').trim().toUpperCase() === invNo
+    );
+
+    // Default status: utamakan appendStatus jika diberikan, jika tidak gunakan pre-paid bila terhubung ke kas keluar / pre-paid
+    let effectiveStatus = appendStatus;
+    if (!effectiveStatus) {
+      effectiveStatus = (isPrepaidByTrx || existing.status === 'pre-paid') ? 'pre-paid' : (existing.status || 'pre-paid');
+    }
+    // Jika faktur memang terhubung ke transaksi belanja kas keluar manual, selalu pastikan pre-paid (kecuali tempo)
+    if (isPrepaidByTrx && effectiveStatus !== 'tempo') {
+      effectiveStatus = 'pre-paid';
+    }
+
     const currentItems = Array.isArray(existing.items) ? [...existing.items] : [];
     currentItems.push(newItem);
 
     const totalAmount = currentItems.reduce((sum, it) => sum + ((Number(it.buyPrice) || 0) * (Number(it.qty) || 1)), 0);
     const itemsCount = currentItems.reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
-    const effectiveStatus = appendStatus || existing.status || 'pre-paid';
 
     const updated = this.updateSupply(id, {
       items: currentItems,
@@ -1060,8 +1129,8 @@ class Store {
       status: effectiveStatus
     });
 
-    // Record cash out ONLY if effectiveStatus is 'lunas' (bukan pre-paid atau tempo)
-    if (effectiveStatus === 'lunas') {
+    // Record cash out ONLY if effectiveStatus is 'lunas' (bukan pre-paid atau tempo) dan bukan terhubung ke kas keluar manual
+    if (effectiveStatus === 'lunas' && !isPrepaidByTrx) {
       const addedAmount = (Number(newItem.buyPrice) || 0) * (Number(newItem.qty) || 1);
       this.addTransaction({
         type: 'keluar',
@@ -1071,8 +1140,18 @@ class Store {
         paymentMethod: existing.paymentMethod || 'Tunai (Laci)',
         nota: existing.invoiceNo
       });
+    } else {
+      // Jika statusnya pre-paid, pastikan membersihkan transaksi duplikat 'Belanja Barang' / 'Tambah Belanja' yang mungkin pernah terbuat
+      if (effectiveStatus === 'pre-paid' || isPrepaidByTrx) {
+        const prevCount = this.state.transactions ? this.state.transactions.length : 0;
+        this.state.transactions = (this.state.transactions || []).filter(
+          (t) => !(t.type === 'keluar' && ((t.nota || '').trim().toUpperCase() === invNo) && (t.category === 'Belanja Barang' || t.category === 'Belanja' || (t.title || '').startsWith('Tambah Belanja:')))
+        );
+        if (this.state.transactions.length !== prevCount) {
+          this.saveState();
+        }
+      }
     }
-    // 'pre-paid' & 'tempo': no additional cash out when appending items — payment already recorded manually or tempo
 
     return updated;
   }

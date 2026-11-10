@@ -238,8 +238,17 @@ export function renderTambahBarangMasukPage(store, params = {}) {
 
   const defaultSupplier = targetSupply ? targetSupply.supplierName : '';
   const defaultDate = targetSupply ? targetSupply.date : getLocalDateString();
-  const defaultStatus = targetSupply ? targetSupply.status : 'pre-paid';
   const belanjaFakturList = store.getBelanjaSepatuFakturList ? store.getBelanjaSepatuFakturList() : [];
+
+  // PENTING: Untuk Tambah Barang (isAppend) maupun Belanja Baru, defaultStatus SELALU 'pre-paid'
+  // (karena sepatu yang masuk dari suplier/ball telah dibayar sebelumnya lewat Kas Keluar).
+  // Status 'tempo' dipertahankan jika nota suplier memang berstatus tempo.
+  let defaultStatus = 'pre-paid';
+  if (isEdit && targetSupply) {
+    defaultStatus = targetSupply.status || 'pre-paid';
+  } else if (isAppend && targetSupply) {
+    defaultStatus = targetSupply.status === 'tempo' ? 'tempo' : 'pre-paid';
+  }
 
   const cleanPrefix = (defaultSupplier || '').trim().toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9_-]/g, '') || 'BALL';
   const initialInvoicePreview = targetSupply ? targetSupply.invoiceNo : `${cleanPrefix}-${Math.floor(100 + Math.random() * 900)}`;
@@ -1510,7 +1519,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     // KASUS 1: APPEND KE NOTA SUPLIER YANG SUDAH ADA
     if (isAppend && targetSupply) {
       const statusRadio = document.querySelector('input[name="supplyStatus"]:checked');
-      const appendStatus = statusRadio ? statusRadio.value : (targetSupply ? targetSupply.status : 'pre-paid');
+      const appendStatus = statusRadio ? statusRadio.value : (targetSupply.status === 'tempo' ? 'tempo' : 'pre-paid');
 
       // Perbarui status nota jika ada penyesuaian (misal: pre-paid)
       store.updateSupply(targetSupply.id, {
@@ -1539,7 +1548,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     const suplier = (document.getElementById('input-suplier-name') && document.getElementById('input-suplier-name').value.trim()) || 'Suplier Sepatu';
     const date = (document.getElementById('input-belanja-date') && document.getElementById('input-belanja-date').value) || getLocalDateString();
     const statusRadio = document.querySelector('input[name="supplyStatus"]:checked');
-    const status = statusRadio ? statusRadio.value : (targetSupply ? targetSupply.status : 'lunas');
+    const status = statusRadio ? statusRadio.value : (targetSupply ? targetSupply.status : 'pre-paid');
 
     const cleanItems = items.map((it) => ({
       id: it.id,

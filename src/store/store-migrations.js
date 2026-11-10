@@ -31,10 +31,46 @@ export function migrateReconcileSupplyTransactions(data) {
   if (!data || !Array.isArray(data.supplies) || !Array.isArray(data.transactions)) return false;
   let changed = false;
 
+  // Himpun nota yang telah dicatat manual di Kas Keluar ('BIAYA BELANJA SEPATU')
+  const prepaidNotaSet = new Set(
+    data.transactions
+      .filter((t) => t.type === 'keluar' && (
+        (t.category || '').toUpperCase().includes('BELANJA SEPATU') ||
+        (t.category || '').toUpperCase() === 'BIAYA BELANJA SEPATU'
+      ))
+      .map((t) => (t.nota || '').trim().toUpperCase())
+      .filter(Boolean)
+  );
+
   data.supplies.forEach((s) => {
-    if (s.status !== 'lunas') return; // 'tempo' dan 'pre-paid' tidak memerlukan rekonsiliasi kas keluar otomatis
     const invNo = (s.invoiceNo || '').trim();
     if (!invNo) return;
+    const isPrepaidByTrx = prepaidNotaSet.has(invNo.toUpperCase());
+
+    // Jika faktur ini adalah pre-paid atau tersambung ke kas keluar BIAYA BELANJA SEPATU:
+    if (s.status === 'pre-paid' || isPrepaidByTrx) {
+      if (s.status !== 'pre-paid') {
+        s.status = 'pre-paid';
+        changed = true;
+      }
+      // Bersihkan transaksi kas keluar duplikat 'Belanja Barang' / 'Tambah Belanja' yang pernah terbuat otomatis
+      const prevTrxCount = data.transactions.length;
+      data.transactions = data.transactions.filter((t) => {
+        if (t.type === 'keluar' && ((t.nota || '').trim().toUpperCase() === invNo.toUpperCase())) {
+          const cat = (t.category || '').trim();
+          if (cat === 'Belanja Barang' || cat === 'Belanja' || (t.title || '').startsWith('Tambah Belanja:')) {
+            return false;
+          }
+        }
+        return true;
+      });
+      if (data.transactions.length !== prevTrxCount) {
+        changed = true;
+      }
+      return; // Pre-paid: TIDAK PERNAH membuat transaksi kas keluar otomatis
+    }
+
+    if (s.status !== 'lunas') return; // 'tempo' dilewati
 
     const expectedTotal = Number(s.totalAmount) || 0;
     if (expectedTotal <= 0) return;
@@ -42,14 +78,14 @@ export function migrateReconcileSupplyTransactions(data) {
     const existingTrxs = data.transactions.filter(
       (t) => t.type === 'keluar' &&
         (t.category === 'Belanja Barang' || t.category === 'Belanja') &&
-        ((t.nota || '').trim() === invNo)
+        ((t.nota || '').trim().toUpperCase() === invNo.toUpperCase())
     );
     const existingTotal = existingTrxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     if (existingTotal < expectedTotal) {
       if (s.items && Array.isArray(s.items) && s.items.length > 0) {
         data.transactions = data.transactions.filter(
-          (t) => !(t.type === 'keluar' && (t.category === 'Belanja Barang' || t.category === 'Belanja') && ((t.nota || '').trim() === invNo))
+          (t) => !(t.type === 'keluar' && (t.category === 'Belanja Barang' || t.category === 'Belanja') && ((t.nota || '').trim().toUpperCase() === invNo.toUpperCase()))
         );
         s.items.forEach((it, idx) => {
           const itemQty = Number(it.qty) || 1;
