@@ -117,6 +117,18 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 
 ---
 
+### 9. Fitur Penggabungan Kontainer Nota Belanja & Pilihan Satukan Faktur pada Tarik Spreadsheet
+- **Masalah & Penyebab:**
+  1. Di Google Sheets, saat pengguna menarik (*drag autofill*) sel yang berakhiran angka (seperti `MSJR011100`), Google Sheets secara default menambah angka otomatis (+1) menjadi `MSJR011101`, `MSJR011102`, dst. Hal ini membuat aplikasi menganggapnya sebagai faktur baru sehingga data masuk ke kontainer terpisah (keluar dari kontainer `MSJR011100`).
+  2. Nilai tanggal serial number Excel/Sheets (seperti `46337`) sempat tampil mentah sebagai angka.
+- **Solusi & Implementasi:**
+  1. **Konversi Serial Date:** Di `src/utils/date.js`, angka serial date (misal `46337`) otomatis dikonversi ke format tanggal lokal `YYYY-MM-DD` (`2026-11-10`).
+  2. **Warisan Nomor Faktur Kosong (*Invoice Inheritance*):** Di `src/services/googleSheets.js`, jika baris barang di spreadsheet mengosongkan nomor faktur, sistem otomatis mewarisi nomor faktur baris sebelumnya.
+  3. **Dropdown "Satukan ke Faktur" di Pop-up Tarik Spreadsheet:** Pengguna dapat memilih faktur tujuan yang sudah ada (misal `MSJR011100`), sehingga semua baris yang ditarik otomatis masuk ke satu kontainer tersebut meski nomor fakturnya di spreadsheet berbeda.
+  4. **Tombol "Gabung" pada Kartu Belanja (`store.mergeSupplyInto`):** Di halaman Belanja & Stok, terdapat tombol `Gabung` pada setiap kartu. Pengguna dapat menyatukan kontainer terpisah (seperti `MSJR011101` - `04`) ke kontainer utama (`MSJR011100`) secara langsung dengan 1 klik. Item sepatu, kuantitas, dan total modal otomatis digabung serta kartu asal dihapus rapi tanpa mengurangi stok.
+
+---
+
 ## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)

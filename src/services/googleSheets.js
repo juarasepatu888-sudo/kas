@@ -2802,7 +2802,7 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
   let totalCount = 0;
   let totalAmount = 0;
 
-  newItems.forEach((it) => {
+  effectiveItems.forEach((it) => {
     const key = it.invoiceNo;
     if (!groupedByInvoice[key]) {
       groupedByInvoice[key] = {
@@ -2827,8 +2827,15 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
   };
 }
 
-export function commitImportedSupplies(store, newItems) {
+export function commitImportedSupplies(store, newItems, targetInvoiceOverride = '') {
   if (!newItems || newItems.length === 0) return { importedSupplies: 0, importedItems: 0 };
+
+  const effectiveItems = newItems.map((it) => {
+    if (targetInvoiceOverride && targetInvoiceOverride.trim() !== '') {
+      return { ...it, invoiceNo: targetInvoiceOverride.trim().toUpperCase() };
+    }
+    return it;
+  });
 
   const grouped = {};
   newItems.forEach((it) => {

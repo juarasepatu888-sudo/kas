@@ -1210,6 +1210,78 @@ class Store {
     }, 500);
   }
 
+  mergeSupplyInto(sourceSupplyId, targetSupplyId) {
+    if (!sourceSupplyId || !targetSupplyId || sourceSupplyId === targetSupplyId) return false;
+    const source = (this.state.supplies || []).find((s) => s.id === sourceSupplyId);
+    const target = (this.state.supplies || []).find((s) => s.id === targetSupplyId);
+    if (!source || !target) return false;
+
+    const sourceItems = Array.isArray(source.items) ? source.items : [];
+    const targetItems = Array.isArray(target.items) ? [...target.items] : [];
+
+    // Pindahkan semua item source ke target
+    sourceItems.forEach((it) => {
+      targetItems.push({
+        ...it,
+        id: it.id || `item-${Date.now()}-${Math.floor(Math.random() * 10000)}`
+      });
+    });
+
+    const totalAmount = targetItems.reduce((sum, it) => sum + ((Number(it.buyPrice) || 0) * (Number(it.qty) || 1)), 0);
+    const itemsCount = targetItems.reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
+
+    // Update target supply
+    const targetIdx = this.state.supplies.findIndex((s) => s.id === targetSupplyId);
+    this.state.supplies[targetIdx] = {
+      ...target,
+      items: targetItems,
+      totalAmount,
+      itemsCount
+    };
+
+    // Hapus source supply
+    this.state.supplies = this.state.supplies.filter((s) => s.id !== sourceSupplyId);
+
+    // Hapus transaksi kas keluar duplikat dari source supply jika ada
+    if (source.invoiceNo) {
+      this.state.transactions = (this.state.transactions || []).filter(
+        (t) => t.nota !== source.invoiceNo || t.category === 'BIAYA BELANJA SEPATU'
+      );
+    }
+
+    // Upsert produk katalog
+    targetItems.forEach((it) => {
+      if (it.barcode) {
+        this.upsertProduct({
+          barcode: it.barcode,
+          name: it.name,
+          kondisi: it.kondisi || 'Bagus',
+          catatanMinus: it.catatanMinus || '',
+          photo: it.photo || null,
+          buyPrice: it.buyPrice,
+          supplier: target.supplierName,
+          date: target.date,
+          qty: it.qty
+        });
+      }
+    });
+
+    this.notify();
+
+    setTimeout(async () => {
+      try {
+        const ts = new Date().toISOString();
+        this._lastPushTimestamp = ts;
+        await pushStateToSupabase(this.state, ts);
+        console.log('[Store] mergeSupplyInto pushed to Supabase immediately');
+      } catch (e) {
+        console.warn('[Store] Failed to push mergeSupplyInto to Supabase:', e.message);
+      }
+    }, 500);
+
+    return true;
+  }
+
   // Master Catalog Products (Indexed by Barcode Code 39)
   // Catatan: catalog produk hanya menyimpan metadata (nama, harga, foto, kondisi).
   // Sumber stok HANYA dari supplies (faktur belanja), bukan dari field 'stock' di sini.

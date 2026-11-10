@@ -144,6 +144,50 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
       </div>
 
 
+      
+      <!-- Modal Gabungkan Kontainer / Faktur Belanja -->
+      <div id="modal-merge-supply" class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 hidden">
+        <div class="glass-card border border-blue-500/40 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+          <div class="p-3.5 border-b border-white/10 flex items-center justify-between bg-surface/90">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-blue-400 text-xl">call_merge</span>
+              <h3 class="font-bold text-sm text-on-surface">Gabungkan Kontainer Belanja</h3>
+            </div>
+            <button type="button" id="btn-close-modal-merge" class="text-on-surface-variant hover:text-white p-1 rounded-lg">
+              <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
+
+          <div class="p-4 flex flex-col gap-3 text-xs">
+            <p class="text-on-surface-variant leading-relaxed">
+              Pindahkan semua sepatu dari nota <b id="merge-source-no" class="text-white">-</b> ke dalam kontainer nota tujuan di bawah ini:
+            </p>
+
+            <div class="flex flex-col gap-1">
+              <label for="merge-target-select" class="font-semibold text-on-surface text-[11px]">Pilih Nota Tujuan:</label>
+              <select id="merge-target-select" class="glass-input w-full px-2.5 py-2 text-xs rounded-lg text-on-surface focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <!-- Injected dynamically -->
+              </select>
+            </div>
+
+            <div class="p-2 rounded-lg bg-blue-950/30 border border-blue-500/20 text-[10.5px] text-blue-300 flex items-start gap-1.5">
+              <span class="material-symbols-outlined text-[14px] shrink-0 text-blue-400 mt-0.5">info</span>
+              <span>Seluruh item sepatu akan disatukan dan kontainer asal akan dihapus tanpa mengurangi stok.</span>
+            </div>
+          </div>
+
+          <div class="p-3 border-t border-white/10 flex items-center justify-end gap-2 bg-surface/90">
+            <button type="button" id="btn-cancel-merge" class="px-3 py-1.5 rounded-lg border border-neutral-700 text-xs text-neutral-300 hover:bg-neutral-800 transition">
+              Batal
+            </button>
+            <button type="button" id="btn-confirm-merge" class="glass-primary glass-btn px-4 py-1.5 rounded-lg text-primary-btn text-xs font-bold flex items-center gap-1 active:scale-95 transition">
+              <span class="material-symbols-outlined text-sm">check</span>
+              <span>Gabungkan Sekarang</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Modal Scanner Barcode Kamera untuk Pencarian Stok -->
       <div id="modal-pasok-scanner" class="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/90 p-4 hidden">
         <!-- Top bar: Tutup & Judul -->
@@ -268,6 +312,23 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
           </div>
 
           <!-- Ringkasan Statistik -->
+          <!-- Pilihan Kontainer / Faktur Tujuan -->
+          <div class="px-3.5 py-2.5 bg-surface/80 border-b border-white/10 flex flex-col gap-1 text-xs">
+            <label for="pull-target-invoice-select" class="text-[11px] font-semibold text-on-surface flex items-center justify-between">
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary text-[15px]">inventory_2</span>
+                <span>Satukan ke Kontainer / Faktur:</span>
+              </span>
+              <span class="text-[10px] text-on-surface-variant font-normal">Pilih faktur tujuan jika ingin disatukan</span>
+            </label>
+            <select 
+              id="pull-target-invoice-select" 
+              class="glass-input w-full px-2.5 py-1.5 text-xs rounded-lg text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">(Otomatis) Sesuai Faktur Spreadsheet</option>
+            </select>
+          </div>
+
           <div class="p-3 bg-emerald-950/30 border-b border-emerald-500/20 grid grid-cols-3 gap-2 text-center text-xs">
             <div class="bg-surface/50 p-1.5 rounded-lg border border-emerald-500/20">
               <div class="text-[10px] text-on-surface-variant">Total Item</div>
@@ -747,6 +808,17 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
               </button>
               <button 
                 type="button" 
+                data-action="merge-supply" 
+                data-id="${supply.id}" 
+                data-no="${supply.invoiceNo}" 
+                class="glass-chip-btn inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-blue-400 text-[10px] font-semibold hover:text-blue-300"
+                title="Gabungkan kontainer nota ini ke nota lain"
+              >
+                <span class="material-symbols-outlined text-[12px]">call_merge</span>
+                <span>Gabung</span>
+              </button>
+              <button 
+                type="button" 
                 data-action="edit-supply" 
                 data-id="${supply.id}" 
                 class="glass-chip-btn inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-primary text-[10px] font-semibold"
@@ -776,6 +848,33 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
         e.stopPropagation();
         const id = btn.getAttribute('data-id');
         router.navigate('tambah-pasok', { appendSupplyId: id });
+      });
+    });
+
+    // Bind Merge Supply buttons
+    container.querySelectorAll('[data-action="merge-supply"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const invoiceNo = btn.getAttribute('data-no');
+        currentMergeSourceId = id;
+        currentMergeSourceNo = invoiceNo;
+
+        if (mergeSourceNoEl) mergeSourceNoEl.textContent = invoiceNo;
+
+        if (mergeTargetSelect) {
+          const allSupplies = store.getSupplies();
+          const otherSupplies = allSupplies.filter((s) => s.id !== id);
+          if (otherSupplies.length === 0) {
+            alert('Tidak ada nota lain untuk digabungkan.');
+            return;
+          }
+          mergeTargetSelect.innerHTML = otherSupplies.map((s) => {
+            return `<option value="${s.id}">${s.invoiceNo} (${s.itemsCount || 1} Psg - ${s.supplierName || 'Supplier'})`;
+          }).join('');
+        }
+
+        if (modalMerge) modalMerge.classList.remove('hidden');
       });
     });
 
@@ -927,6 +1026,16 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
           }).join('');
         }
 
+        const targetSelect = document.getElementById('pull-target-invoice-select');
+        if (targetSelect) {
+          const allSupplies = store.getSupplies();
+          let optionsHtml = '<option value="">(Otomatis) Sesuai Faktur Spreadsheet</option>';
+          allSupplies.forEach((s) => {
+            optionsHtml += `<option value="${s.invoiceNo}">${s.invoiceNo} (${s.itemsCount || 1} Psg - ${s.supplierName || 'Supplier'})`;
+          });
+          targetSelect.innerHTML = optionsHtml;
+        }
+
         if (modalPull) {
           const subtitle = document.getElementById('pull-source-subtitle');
           if (subtitle) {
@@ -960,7 +1069,9 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
         btnConfirmPull.disabled = true;
         btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Menyimpan ke Stok...';
 
-        const res = commitImportedSupplies(store, pendingImportItems);
+        const targetSelect = document.getElementById('pull-target-invoice-select');
+        const targetOverride = targetSelect ? targetSelect.value : '';
+        const res = commitImportedSupplies(store, pendingImportItems, targetOverride);
 
         // Bersihkan tab 'Input Barang Baru' jika sumbernya dari sana
         const isFromInputSheet = pendingImportItems.some((it) => it.sourceSheet === 'Input Barang Baru');
@@ -981,6 +1092,48 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
       } finally {
         btnConfirmPull.disabled = false;
         btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm">check_circle</span> <span>Konfirmasi & Simpan ke Stok</span>';
+      }
+    });
+  }
+
+
+  // ── Gabungkan Kontainer / Faktur Belanja ──
+  let currentMergeSourceId = null;
+  let currentMergeSourceNo = null;
+  const modalMerge = document.getElementById('modal-merge-supply');
+  const mergeSourceNoEl = document.getElementById('merge-source-no');
+  const mergeTargetSelect = document.getElementById('merge-target-select');
+  const btnCloseMerge = document.getElementById('btn-close-modal-merge');
+  const btnCancelMerge = document.getElementById('btn-cancel-merge');
+  const btnConfirmMerge = document.getElementById('btn-confirm-merge');
+
+  function closeMergeModal() {
+    if (modalMerge) modalMerge.classList.add('hidden');
+    currentMergeSourceId = null;
+    currentMergeSourceNo = null;
+  }
+
+  if (btnCloseMerge) btnCloseMerge.addEventListener('click', closeMergeModal);
+  if (btnCancelMerge) btnCancelMerge.addEventListener('click', closeMergeModal);
+
+  if (btnConfirmMerge) {
+    btnConfirmMerge.addEventListener('click', () => {
+      if (!currentMergeSourceId || !mergeTargetSelect) return;
+      const targetId = mergeTargetSelect.value;
+      if (!targetId) {
+        alert('Pilih nota tujuan terlebih dahulu.');
+        return;
+      }
+
+      const success = store.mergeSupplyInto(currentMergeSourceId, targetId);
+      if (success) {
+        const targetSupply = store.getSupplyById(targetId);
+        showToast(`Berhasil menyatukan nota ke ${targetSupply ? targetSupply.invoiceNo : 'kontainer tujuan'}!`, 'success');
+        closeMergeModal();
+        updateKpi();
+        renderItems();
+      } else {
+        alert('Gagal menggabungkan nota.');
       }
     });
   }
