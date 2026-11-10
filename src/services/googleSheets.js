@@ -2802,7 +2802,7 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
   let totalCount = 0;
   let totalAmount = 0;
 
-  effectiveItems.forEach((it) => {
+  newItems.forEach((it) => {
     const key = it.invoiceNo;
     if (!groupedByInvoice[key]) {
       groupedByInvoice[key] = {
@@ -2838,7 +2838,7 @@ export function commitImportedSupplies(store, newItems, targetInvoiceOverride = 
   });
 
   const grouped = {};
-  newItems.forEach((it) => {
+  effectiveItems.forEach((it) => {
     if (!grouped[it.invoiceNo]) {
       grouped[it.invoiceNo] = {
         invoiceNo: it.invoiceNo,
