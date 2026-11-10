@@ -2,6 +2,14 @@ import { formatRupiah } from '../store/store.js';
 import { renderHeader, bindHeaderEvents } from '../components/header.js';
 import { showToast } from '../components/toast.js';
 import { fetchNewSuppliesFromGoogleSheets, commitImportedSupplies, clearInputSheet } from '../services/googleSheets.js';
+import { Html5Qrcode } from 'html5-qrcode';
+import {
+  buildScannerConfig1D,
+  enhanceVideoElement,
+  checkCameraSupport,
+  describeCameraError,
+  playBeep
+} from '../utils/barcode-scanner-config.js';
 
 export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin = true) {
   const supplies = store.getSupplies();
@@ -92,8 +100,8 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
           </button>
         </div>` : ''}
 
-        <!-- Search Bar -->
-        <div class="relative w-full">
+        <!-- Search Bar with Scanner Camera Button -->
+        <div class="relative w-full flex items-center">
           <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
             <span class="material-symbols-outlined text-[18px]">search</span>
           </div>
@@ -101,8 +109,16 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
             type="text" 
             id="pasok-search-input"
             placeholder="Cari barcode, nama sepatu, suplier..." 
-            class="glass-input w-full pl-9 pr-3 py-2 text-on-surface font-body-md text-xs rounded-lg focus:outline-none focus:ring-2 focus:ring-on-tertiary-container transition-all"
+            class="glass-input w-full pl-9 pr-11 py-2 text-on-surface font-body-md text-xs rounded-lg focus:outline-none focus:ring-2 focus:ring-on-tertiary-container transition-all"
           />
+          <button
+            type="button"
+            id="btn-scan-pasok-search"
+            class="absolute right-1 w-8 h-8 rounded-md flex items-center justify-center text-primary hover:text-emerald-300 hover:bg-white/10 active:scale-95 transition-all"
+            title="Scan Barcode Sepatu dengan Kamera"
+          >
+            <span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+          </button>
         </div>
 
         <!-- Filter Segmented Tabs -->
@@ -124,6 +140,113 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
         <!-- Invoices/Belanja List Container -->
         <div id="pasok-list-container" class="flex flex-col gap-2">
           <!-- Dynamically populated -->
+        </div>
+      </div>
+
+
+      <!-- Modal Scanner Barcode Kamera untuk Pencarian Stok -->
+      <div id="modal-pasok-scanner" class="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/90 p-4 hidden">
+        <!-- Top bar: Tutup & Judul -->
+        <div class="w-full flex items-center justify-between text-white pt-2">
+          <button 
+            type="button" 
+            id="btn-close-pasok-scanner" 
+            class="w-10 h-10 rounded-full glass-btn flex items-center justify-center text-white"
+          >
+            <span class="material-symbols-outlined text-[24px]">close</span>
+          </button>
+          <h3 class="font-headline-sm text-base font-bold">Scan Barcode Sepatu</h3>
+          <div class="w-10"></div>
+        </div>
+
+        <div class="flex-1 w-full max-w-[400px] flex flex-col items-center justify-center gap-4 py-4">
+          <div class="w-full flex flex-col gap-3">
+            <!-- Container Camera Preview -->
+            <div class="relative isolate w-full h-56 sm:h-64 rounded-3xl overflow-hidden border-3 border-emerald-400 shadow-2xl bg-black" style="box-shadow: 0 0 30px rgba(52, 211, 153, 0.3);">
+              <div id="pasok-qr-reader" class="w-full h-full"></div>
+              
+              <!-- Overlay: Sudut bidik + Garis panduan -->
+              <svg class="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="cornerGradPasok" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:rgba(52,211,153,0.9);stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:rgba(52,211,153,0.4);stop-opacity:1" />
+                  </linearGradient>
+                </defs>
+                <path d="M 20,20 L 20,30 M 20,20 L 30,20" stroke="url(#cornerGradPasok)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+                <path d="M 80,20 L 80,30 M 80,20 L 70,20" stroke="url(#cornerGradPasok)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+                <path d="M 20,80 L 20,70 M 20,80 L 30,80" stroke="url(#cornerGradPasok)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+                <path d="M 80,80 L 80,70 M 80,80 L 70,80" stroke="url(#cornerGradPasok)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+                <line x1="25" y1="50" x2="75" y2="50" stroke="rgba(52,211,153,0.5)" stroke-width="0.8" stroke-dasharray="2,2">
+                  <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+                </line>
+              </svg>
+            </div>
+
+            <!-- Status message -->
+            <div id="pasok-scanner-status" class="glass-sheet rounded-2xl p-3 flex items-start gap-2.5 text-white">
+              <span class="material-symbols-outlined text-emerald-400 text-[20px] shrink-0 mt-0.5">info</span>
+              <span id="pasok-scanner-status-text" class="text-sm leading-snug">Arahkan kamera ke barcode label sepatu</span>
+            </div>
+
+            <!-- Last scanned (hidden initially) -->
+            <div id="pasok-scanner-last-read" class="hidden glass-emerald rounded-2xl p-3 flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-emerald-800 text-[20px] shrink-0">check_circle</span>
+              <div class="flex-1 min-w-0">
+                <span class="text-[10px] font-semibold text-emerald-800 uppercase tracking-wide block">Terdeteksi</span>
+                <span id="pasok-scanner-last-code" class="text-base font-bold text-emerald-950 font-mono tracking-wider block truncate">-</span>
+              </div>
+            </div>
+
+            <!-- Tombol Coba Lagi jika kamera gagal -->
+            <button
+              type="button"
+              id="btn-pasok-scanner-retry"
+              class="hidden w-full py-2.5 px-4 rounded-xl glass-rose glass-btn font-label-md text-xs font-bold text-rose-800 flex items-center justify-center gap-2"
+            >
+              <span class="material-symbols-outlined text-[18px]">replay</span>
+              <span>Coba Buka Kamera Lagi</span>
+            </button>
+          </div>
+
+          <!-- Controls: Senter, Zoom, Switch Camera -->
+          <div class="w-full flex items-center justify-center gap-3">
+            <button
+              type="button"
+              id="btn-pasok-scanner-torch"
+              class="w-12 h-12 rounded-full glass-sheet glass-btn flex items-center justify-center text-white active:scale-95"
+              title="Senter"
+            >
+              <span class="material-symbols-outlined text-[22px]">flashlight_off</span>
+            </button>
+            <button
+              type="button"
+              id="btn-pasok-scanner-zoom"
+              class="w-12 h-12 rounded-full glass-sheet glass-btn flex items-center justify-center text-white active:scale-95 text-xs font-bold"
+              title="Perbesar"
+            >
+              <span id="pasok-scanner-zoom-label">1x</span>
+            </button>
+            <button
+              type="button"
+              id="btn-pasok-scanner-switch"
+              class="w-12 h-12 rounded-full glass-sheet glass-btn flex items-center justify-center text-white active:scale-95"
+              title="Ganti Kamera"
+            >
+              <span class="material-symbols-outlined text-[22px]">cameraswitch</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bawah: Batal -->
+        <div class="w-full max-w-[400px] pb-4">
+          <button
+            type="button"
+            id="btn-cancel-pasok-scanner"
+            class="w-full py-3 rounded-2xl glass-card text-on-surface font-label-lg text-sm font-semibold active:scale-[0.98]"
+          >
+            Tutup Scanner
+          </button>
         </div>
       </div>
 
@@ -217,6 +340,250 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
       renderItems();
     });
   }
+
+  // ── Scanner Barcode Kamera untuk Pencarian Stok ──
+  const btnScanSearch = document.getElementById('btn-scan-pasok-search');
+  const pasokScannerModal = document.getElementById('modal-pasok-scanner');
+  const btnClosePasokScanner = document.getElementById('btn-close-pasok-scanner');
+  const btnCancelPasokScanner = document.getElementById('btn-cancel-pasok-scanner');
+  const btnPasokScannerTorch = document.getElementById('btn-pasok-scanner-torch');
+  const btnPasokScannerZoom = document.getElementById('btn-pasok-scanner-zoom');
+  const btnPasokScannerSwitch = document.getElementById('btn-pasok-scanner-switch');
+  const btnPasokScannerRetry = document.getElementById('btn-pasok-scanner-retry');
+
+  let pasokHtml5Scanner = null;
+  let pasokScannerStarted = false;
+  let pasokTorchOn = false;
+  let pasokScannerZoom = 1;
+  let pasokUseFrontCamera = false;
+  let isProcessingPasokScan = false;
+
+  function setPasokScannerStatus(message, type = 'info') {
+    const statusEl = document.getElementById('pasok-scanner-status');
+    const textEl = document.getElementById('pasok-scanner-status-text');
+    if (!statusEl || !textEl) return;
+
+    statusEl.className = 'glass-sheet rounded-2xl p-3 flex items-start gap-2.5 text-white';
+    const iconEl = statusEl.querySelector('.material-symbols-outlined');
+    
+    if (type === 'error') {
+      statusEl.classList.add('!bg-rose-500/20', 'border', 'border-rose-500/50');
+      if (iconEl) {
+        iconEl.textContent = 'error';
+        iconEl.className = 'material-symbols-outlined text-rose-400 text-[20px] shrink-0 mt-0.5';
+      }
+    } else if (type === 'success') {
+      statusEl.classList.add('!bg-emerald-500/20', 'border', 'border-emerald-500/50');
+      if (iconEl) {
+        iconEl.textContent = 'check_circle';
+        iconEl.className = 'material-symbols-outlined text-emerald-400 text-[20px] shrink-0 mt-0.5';
+      }
+    } else {
+      if (iconEl) {
+        iconEl.textContent = 'info';
+        iconEl.className = 'material-symbols-outlined text-emerald-400 text-[20px] shrink-0 mt-0.5';
+      }
+    }
+    
+    textEl.textContent = message;
+  }
+
+  function showPasokScannerRetryButton(show) {
+    if (btnPasokScannerRetry) btnPasokScannerRetry.classList.toggle('hidden', !show);
+  }
+
+  async function applyPasokTorch(on) {
+    try {
+      const video = document.querySelector('#pasok-qr-reader video');
+      if (!video || !video.srcObject) return;
+      const track = video.srcObject.getVideoTracks()[0];
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (capabilities.torch) {
+        await track.applyConstraints({ advanced: [{ torch: on }] });
+        pasokTorchOn = on;
+        if (btnPasokScannerTorch) {
+          const icon = btnPasokScannerTorch.querySelector('.material-symbols-outlined');
+          if (icon) icon.textContent = on ? 'flashlight_on' : 'flashlight_off';
+        }
+      }
+    } catch (err) {
+      console.warn('[pasok-scanner] torch error:', err);
+    }
+  }
+
+  function cyclePasokZoom() {
+    const steps = [1, 1.5, 2, 2.5, 3];
+    const idx = steps.indexOf(pasokScannerZoom);
+    pasokScannerZoom = steps[(idx + 1) % steps.length];
+    try {
+      const video = document.querySelector('#pasok-qr-reader video');
+      if (video && video.srcObject) {
+        const track = video.srcObject.getVideoTracks()[0];
+        const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+        if (capabilities.zoom) {
+          track.applyConstraints({ advanced: [{ zoom: pasokScannerZoom }] });
+        }
+      }
+      const label = document.getElementById('pasok-scanner-zoom-label');
+      if (label) label.textContent = `${pasokScannerZoom}x`;
+    } catch (err) {
+      console.warn('[pasok-scanner] zoom error:', err);
+    }
+  }
+
+  function switchPasokCamera() {
+    pasokUseFrontCamera = !pasokUseFrontCamera;
+    closePasokScanner();
+    setTimeout(() => openPasokScanner(), 100);
+  }
+
+  function openPasokScanner() {
+    if (!pasokScannerModal) return;
+    pasokScannerModal.classList.remove('hidden');
+    isProcessingPasokScan = false;
+    setPasokScannerStatus('Arahkan kamera ke barcode label sepatu', 'info');
+    showPasokScannerRetryButton(false);
+
+    let lastScanTime = 0;
+    const cooldown = 1500;
+
+    const onSuccess = (decodedText) => {
+      if (isProcessingPasokScan) return;
+      const now = Date.now();
+      if (now - lastScanTime < cooldown) return;
+      lastScanTime = now;
+
+      isProcessingPasokScan = true;
+      playBeep('success');
+
+      const lastReadEl = document.getElementById('pasok-scanner-last-read');
+      const lastCodeEl = document.getElementById('pasok-scanner-last-code');
+      if (lastReadEl && lastCodeEl) {
+        lastCodeEl.textContent = decodedText;
+        lastReadEl.classList.remove('hidden');
+      }
+
+      setPasokScannerStatus(`Barcode terdeteksi: ${decodedText}`, 'success');
+
+      // Masukkan hasil barcode ke search input
+      if (searchInput) {
+        searchInput.value = decodedText;
+        searchQuery = decodedText.toLowerCase().trim();
+        
+        // Buka otomatis rincian nota belanja yang memiliki barcode ini
+        const allSupplies = store.getSupplies();
+        allSupplies.forEach((s) => {
+          if (s.items && s.items.some((it) => (it.barcode && it.barcode.toLowerCase().includes(searchQuery)) || (it.name && it.name.toLowerCase().includes(searchQuery)))) {
+            expandedSupplies.add(s.id);
+          }
+        });
+
+        renderItems();
+      }
+
+      setTimeout(() => {
+        closePasokScanner();
+        showToast(`Mencari barcode: ${decodedText}`, 'success');
+      }, 400);
+    };
+
+    const onError = () => {
+      // Normal saat scanning
+    };
+
+    const afterStart = () => {
+      pasokScannerStarted = true;
+      enhanceVideoElement('pasok-qr-reader');
+      applyPasokTorch(false);
+      setPasokScannerStatus('Arahkan kamera ke barcode label sepatu', 'info');
+      showPasokScannerRetryButton(false);
+    };
+
+    const tryStart = async (cameraConstraint, config, label) => {
+      if (pasokHtml5Scanner) {
+        try { await pasokHtml5Scanner.stop(); } catch (_) {}
+        try { pasokHtml5Scanner.clear(); } catch (_) {}
+      }
+      const scanner = new Html5Qrcode('pasok-qr-reader', {
+        verbose: false,
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+      });
+      pasokHtml5Scanner = scanner;
+      return scanner.start(cameraConstraint, config, onSuccess, onError)
+        .then(() => { afterStart(); })
+        .catch(async (err) => {
+          console.warn(`[pasok-scanner] gagal start (${label}):`, err);
+          try { await scanner.stop(); } catch (_) {}
+          try { scanner.clear(); } catch (_) {}
+          throw err;
+        });
+    };
+
+    const baseConfig = buildScannerConfig1D();
+    const facing = pasokUseFrontCamera ? 'user' : 'environment';
+
+    tryStart({ facingMode: { ideal: facing } }, baseConfig, 'facingMode ideal')
+      .catch(() => tryStart({ facingMode: facing }, { ...baseConfig, fps: 15 }, 'facingMode exact'))
+      .catch(() => tryStart({ facingMode: 'environment' }, { ...baseConfig, fps: 10 }, 'environment fallback'))
+      .catch(() => tryStart({ facingMode: 'user' }, { ...baseConfig, fps: 10 }, 'user fallback'))
+      .catch((err) => {
+        console.error('[pasok-scanner] kamera tidak dapat dibuka:', err);
+        setPasokScannerStatus(describeCameraError(err), 'error');
+        showPasokScannerRetryButton(true);
+      });
+  }
+
+  function closePasokScanner() {
+    isProcessingPasokScan = true;
+    if (!pasokScannerModal) return;
+    pasokScannerModal.classList.add('hidden');
+    applyPasokTorch(false);
+
+    try {
+      const video = document.querySelector('#pasok-qr-reader video');
+      if (video && video.srcObject) {
+        const stream = video.srcObject;
+        if (stream && typeof stream.getTracks === 'function') {
+          stream.getTracks().forEach((track) => {
+            try { track.stop(); } catch (_) {}
+          });
+        }
+        video.srcObject = null;
+      }
+    } catch (_) {}
+
+    const oldScanner = pasokHtml5Scanner;
+    pasokHtml5Scanner = null;
+    if (oldScanner) {
+      try {
+        const isScanning = typeof oldScanner.isScanning === 'boolean'
+          ? oldScanner.isScanning
+          : (oldScanner.getState && oldScanner.getState() === 2);
+
+        if (isScanning) {
+          oldScanner.stop()
+            .then(() => { try { oldScanner.clear(); } catch (_) {} })
+            .catch(() => { try { oldScanner.clear(); } catch (_) {} });
+        } else {
+          try { oldScanner.clear(); } catch (_) {}
+        }
+      } catch (_) {
+        try { oldScanner.clear(); } catch (_) {}
+      }
+    }
+  }
+
+  if (btnScanSearch) btnScanSearch.addEventListener('click', openPasokScanner);
+  if (btnClosePasokScanner) btnClosePasokScanner.addEventListener('click', closePasokScanner);
+  if (btnCancelPasokScanner) btnCancelPasokScanner.addEventListener('click', closePasokScanner);
+  if (btnPasokScannerTorch) btnPasokScannerTorch.addEventListener('click', () => applyPasokTorch(!pasokTorchOn));
+  if (btnPasokScannerZoom) btnPasokScannerZoom.addEventListener('click', cyclePasokZoom);
+  if (btnPasokScannerSwitch) btnPasokScannerSwitch.addEventListener('click', switchPasokCamera);
+  if (btnPasokScannerRetry) btnPasokScannerRetry.addEventListener('click', () => {
+    closePasokScanner();
+    setTimeout(() => openPasokScanner(), 100);
+  });
+
 
   document.querySelectorAll('.pasok-filter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {

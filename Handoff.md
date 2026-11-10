@@ -91,6 +91,21 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 
 ---
 
+### 7. Fitur Scanner Kamera Barcode pada Pencarian Belanja & Stok
+- **Kebutuhan:** Mempermudah pencarian sepatu tertentu di gudang/daftar stok cukup dengan scan barcode label sepatu menggunakan kamera.
+- **Implementasi (src/pages/barang-masuk-list.js):**
+  1. Menambahkan tombol kamera `qr_code_scanner` tepat di sisi kanan input pencarian (*Search Bar*).
+  2. Mengintegrasikan modal scanner kamera standar PWA (menggunakan `Html5Qrcode` & `barcode-scanner-config.js`) lengkap dengan fitur:
+     - Torch / Senter (`flashlight`) untuk scan di area gudang yang minim cahaya.
+     - Zoom bertahap (1x, 1.5x, 2x, 2.5x, 3x) untuk membaca barcode ukuran kecil.
+     - Switch Kamera (kamera belakang/depan).
+     - Bip audio sukses.
+  3. **Auto-Search & Auto-Expand:** Saat barcode berhasil dipindai:
+     - Nilai barcode langsung terisi ke input pencarian.
+     - Kartu nota belanja yang memuat sepatu tersebut otomatis terbuka (*auto-expand breakdown*), sehingga pengguna langsung dapat melihat status, kondisi, dan harga modal sepatu tersebut tanpa klik manual.
+
+---
+
 ## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)
