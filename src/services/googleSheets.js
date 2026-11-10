@@ -2597,43 +2597,17 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
 
   const token = await getAccessToken(store);
 
-  // Baca baris data dari tab 'Input Barang Baru' (zona input manual aman dari auto-sync)
-  const INPUT_SHEET = "'Input Barang Baru'";
-  const encodedRange = encodeURIComponent(`${INPUT_SHEET}!A2:M2500`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedRange}?valueRenderOption=UNFORMATTED_VALUE`;
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Gagal membaca sheet 'Barang Masuk (Belanja)' (${res.status})`);
-  }
-
-  const data = await res.json();
-  const rows = data.values || [];
-  // ── DEBUG LOG: lihat data mentah dari spreadsheet ──
-  console.log('[TarikSheet] Total baris terbaca dari spreadsheet:', rows.length);
-  console.log('[TarikSheet] 5 baris pertama:', JSON.stringify(rows.slice(0, 5)));
-  console.log('[TarikSheet] 5 baris terakhir:', JSON.stringify(rows.slice(-5)));
-  if (rows.length === 0) {
-    return { newItems: [], groupedByInvoice: {}, totalCount: 0, totalAmount: 0 };
-  }
-
-  // 1. Kumpulkan daftar kunci duplikasi dari database lokal
-  //    Hanya kunci SPESIFIK (invNo+barcode) yang dipakai untuk cek duplikasi,
-  //    bukan cek global barcode di seluruh katalog produk (terlalu agresif).
+  // 1. Kumpulkan daftar barcode & invoice dari database lokal
   const existingSupplies = store.getSupplies ? store.getSupplies() : [];
-
-  // Kumpulkan: Set berisi "INVNO:::BARCODE" per item supply yang sudah ada
   const existingInvBarcodeKeys = new Set();
-  // Kumpulkan: Set berisi "INVNO:::NAMALOWER" per item supply yang sudah ada
-  const existingInvNameKeys = new Set();
-  // Kumpulkan: barcode yang sudah terdaftar di supply items (BUKAN dari produk global)
   const existingSupplyBarcodes = new Set();
-  // Map invoice -> supply object (untuk keperluan merge/append)
+  const allKnownBarcodes = new Set();
   const existingInvoices = new Map();
+
+  // Kumpulkan seluruh barcode dari produk katalog & supply
+  (store.getProducts ? store.getProducts() : []).forEach((p) => {
+    if (p.barcode) allKnownBarcodes.add(p.barcode.toString().trim().toUpperCase());
+  });
 
   existingSupplies.forEach((s) => {
     const inv = (s.invoiceNo || '').trim().toUpperCase();
@@ -2641,76 +2615,141 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
     if (Array.isArray(s.items)) {
       s.items.forEach((it) => {
         const bc = (it.barcode || '').toString().trim().toUpperCase();
-        const nm = (it.name || '').trim().toLowerCase();
         if (bc && bc !== '-' && !bc.startsWith('SP-')) {
-          // Hanya barcode non-auto yang dianggap unik secara global di supply
           existingSupplyBarcodes.add(bc);
+          allKnownBarcodes.add(bc);
         }
         if (inv && bc) existingInvBarcodeKeys.add(`${inv}:::${bc}`);
-        if (inv && nm) existingInvNameKeys.add(`${inv}:::${nm}`);
       });
     }
   });
 
-  // Set untuk barcode yang digenerate otomatis di sesi ini
-  const existingBarcodes = existingSupplyBarcodes; // alias untuk kompatibilitas
-  // ── DEBUG LOG: lihat data lokal ──
-  console.log('[TarikSheet] Supply lokal di DB:', existingSupplies.length, 'nota');
-  console.log('[TarikSheet] Barcode lokal di supply:', [...existingSupplyBarcodes].slice(0, 10));
-  console.log('[TarikSheet] Invoice lokal:', [...existingInvoices.keys()].slice(0, 10));
+  console.log('[TarikSheet] Database lokal: supplies =', existingSupplies.length, 'barcodes =', existingSupplyBarcodes.size);
 
-  // 2. Filter baris baru yang belum tercatat
+  // 2. Baca dari Google Spreadsheet (utamakan 'Input Barang Baru', fallback ke 'Barang Masuk (Belanja)')
+  let rows = [];
+  let sourceSheet = 'Input Barang Baru';
+
+  try {
+    const encodedInput = encodeURIComponent("'Input Barang Baru'!A2:M2500");
+    const inputUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedInput}?valueRenderOption=UNFORMATTED_VALUE`;
+    const resInput = await fetch(inputUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (resInput.ok) {
+      const dataInput = await resInput.json();
+      const rawRows = dataInput.values || [];
+      // Saring baris yang benar-benar ada isinya (ada No Faktur atau Nama Barang)
+      const validRows = rawRows.filter(r => r && r.some(cell => cell !== undefined && cell !== null && cell.toString().trim() !== ''));
+      if (validRows.length > 0) {
+        rows = rawRows;
+        sourceSheet = 'Input Barang Baru';
+        console.log('[TarikSheet] Menggunakan tab Input Barang Baru (' + rows.length + ' baris)');
+      }
+    }
+  } catch (e) {
+    console.warn('[TarikSheet] Gagal baca Input Barang Baru, mencoba fallback...', e.message);
+  }
+
+  // Jika tab 'Input Barang Baru' kosong atau belum dibuat, baca dari 'Barang Masuk (Belanja)'
+  if (rows.length === 0) {
+    sourceSheet = 'Barang Masuk (Belanja)';
+    const encodedBelanja = encodeURIComponent("'Barang Masuk (Belanja)'!A2:M2500");
+    const belanjaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedBelanja}?valueRenderOption=UNFORMATTED_VALUE`;
+    const resBelanja = await fetch(belanjaUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (resBelanja.ok) {
+      const dataBelanja = await resBelanja.json();
+      rows = dataBelanja.values || [];
+      console.log('[TarikSheet] Menggunakan tab fallback Barang Masuk (Belanja) (' + rows.length + ' baris)');
+    } else {
+      const err = await resBelanja.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gagal membaca Google Sheets (${resBelanja.status})`);
+    }
+  }
+
+  if (rows.length === 0) {
+    return { newItems: [], groupedByInvoice: {}, totalCount: 0, totalAmount: 0, sourceSheet };
+  }
+
+  // 3. Parsing data & saring baris baru
   const newItems = [];
   const generatedBarcodeSet = new Set();
 
   rows.forEach((r, rowIdx) => {
-    // Kolom tab 'Input Barang Baru':
-    // A(0)=NoFaktur, B(1)=Tanggal, C(2)=Supplier, D(3)=Barcode, E(4)=Nama Sepatu,
-    // F(5)=Kondisi, G(6)=Qty, H(7)=HargaModal, I(8)=TotalModal, J(9)=Status, K(10)=Metode, L(11)=Catatan
-    const invNo = (r[0] !== undefined && r[0] !== null) ? r[0].toString().trim() : '';
-    const date = (r[1] !== undefined && r[1] !== null) ? cleanDateString(r[1].toString().trim()) : getLocalDateString();
-    const supplier = (r[2] !== undefined && r[2] !== null) ? r[2].toString().trim() : 'Suplier Sepatu';
-    let barcode = (r[3] !== undefined && r[3] !== null) ? r[3].toString().trim() : '';
-    const name = (r[4] !== undefined && r[4] !== null) ? r[4].toString().trim() : '';
-    const kondisiRaw = (r[5] !== undefined && r[5] !== null) ? r[5].toString().trim() : 'Bagus';
-    const qty = Math.max(1, parseInt(r[6], 10) || 1);
-    const buyPrice = Number(r[7]) || Number(r[8]) || 185000;
-    const statusRaw = (r[9] !== undefined && r[9] !== null) ? r[9].toString().trim().toLowerCase() : '';
+    let invNo = '';
+    let rawDate = '';
+    let supplier = '';
+    let barcode = '';
+    let name = '';
+    let kondisiRaw = 'Bagus';
+    let qty = 1;
+    let buyPrice = 185000;
+    let statusRaw = '';
 
-    // Abaikan baris kosong atau baris tanpa nama/faktur wajib
-    if (!name || !invNo || name.trim() === '' || invNo.trim() === '') {
+    if (sourceSheet === 'Input Barang Baru') {
+      // Tab 'Input Barang Baru':
+      // A(0)=NoFaktur, B(1)=Tanggal, C(2)=Supplier, D(3)=Barcode, E(4)=Nama, F(5)=Kondisi, G(6)=Qty, H(7)=HargaModal, I(8)=TotalModal, J(9)=Status
+      invNo = (r[0] !== undefined && r[0] !== null) ? r[0].toString().trim() : '';
+      rawDate = (r[1] !== undefined && r[1] !== null) ? r[1].toString().trim() : '';
+      supplier = (r[2] !== undefined && r[2] !== null) ? r[2].toString().trim() : 'Suplier Sepatu';
+      barcode = (r[3] !== undefined && r[3] !== null) ? r[3].toString().trim() : '';
+      name = (r[4] !== undefined && r[4] !== null) ? r[4].toString().trim() : '';
+      kondisiRaw = (r[5] !== undefined && r[5] !== null) ? r[5].toString().trim() : 'Bagus';
+      qty = Math.max(1, parseInt(r[6], 10) || 1);
+      buyPrice = Number(r[7]) || Number(r[8]) || 185000;
+      statusRaw = (r[9] !== undefined && r[9] !== null) ? r[9].toString().trim().toLowerCase() : '';
+    } else {
+      // Tab 'Barang Masuk (Belanja)':
+      // A(0)=No, B(1)=NoFaktur, C(2)=Tanggal, D(3)=Supplier, E(4)=Barcode, F(5)=Nama, G(6)=Kondisi, H(7)=Qty, I(8)=HargaModal, J(9)=TotalModal, K(10)=Status
+      const colA = (r[0] !== undefined && r[0] !== null) ? r[0].toString().trim().toUpperCase() : '';
+      invNo = (r[1] !== undefined && r[1] !== null) ? r[1].toString().trim() : '';
+      rawDate = (r[2] !== undefined && r[2] !== null) ? r[2].toString().trim() : '';
+      supplier = (r[3] !== undefined && r[3] !== null) ? r[3].toString().trim() : 'Suplier Sepatu';
+      barcode = (r[4] !== undefined && r[4] !== null) ? r[4].toString().trim() : '';
+      name = (r[5] !== undefined && r[5] !== null) ? r[5].toString().trim() : '';
+      kondisiRaw = (r[6] !== undefined && r[6] !== null) ? r[6].toString().trim() : 'Bagus';
+      qty = Math.max(1, parseInt(r[7], 10) || 1);
+      buyPrice = Number(r[8]) || Number(r[9]) || 185000;
+      statusRaw = (r[10] !== undefined && r[10] !== null) ? r[10].toString().trim().toLowerCase() : '';
+
+      // Lewati baris footer TOTAL
+      if (colA === 'TOTAL' || name.toUpperCase() === 'TOTAL' || name.toUpperCase().includes('TOTAL PENGADAAN')) {
+        return;
+      }
+    }
+
+    // Lewati baris kosong atau tanpa nama barang
+    if (!name || name.trim() === '') {
       return;
+    }
+
+    // Jika nomor faktur kosong, buatkan nomor faktur default berdasarkan supplier / BALL
+    if (!invNo) {
+      invNo = `NOTA-${getLocalDateString().replace(/-/g, '')}`;
     }
 
     const cleanBc = barcode.toUpperCase();
     const cleanInv = invNo.toUpperCase();
-    const cleanNm = name.toLowerCase();
 
-    // Cek duplikasi
-    console.log('[TarikSheet] Baris', rowIdx+2, '| invNo:', invNo, '| name:', name, '| barcode:', barcode);
-    // Prioritas 1: barcode explicit (non-auto) sudah ada di supply items
-    if (cleanBc && cleanBc !== '-' && !cleanBc.startsWith('SP-') && existingSupplyBarcodes.has(cleanBc)) {
-      console.log('[TarikSheet] SKIP baris', rowIdx+2, '- Barcode sudah ada di supply:', cleanBc);
-      return;
+    // ── Validasi Duplikasi HANYA berdasarkan Barcode Eksplisit ──
+    // Sepatu dengan nama sama (misal 5 pasang "CAT" atau "TB") dalam satu faktur DIPERBOLEHKAN!
+    if (cleanBc && cleanBc !== '-' && cleanBc !== 'AUTO' && !cleanBc.startsWith('SP-')) {
+      // 1. Cek apakah barcode ini sudah ada di database lokal
+      if (existingSupplyBarcodes.has(cleanBc) || (cleanInv && existingInvBarcodeKeys.has(`${cleanInv}:::${cleanBc}`))) {
+        console.log(`[TarikSheet] SKIP baris ${rowIdx + 2} - Barcode sudah ada di sistem:`, cleanBc);
+        return;
+      }
+      // 2. Cek apakah barcode ini duplikat dalam batch input sheet yang sama
+      if (generatedBarcodeSet.has(cleanBc)) {
+        console.log(`[TarikSheet] SKIP baris ${rowIdx + 2} - Barcode kembar dalam sheet:`, cleanBc);
+        return;
+      }
     }
-    // Prioritas 2: kombinasi invoice + barcode sudah ada
-    if (cleanInv && cleanBc && existingInvBarcodeKeys.has(`${cleanInv}:::${cleanBc}`)) {
-      console.log('[TarikSheet] SKIP baris', rowIdx+2, '- Inv+Barcode sudah ada:', cleanInv, cleanBc);
-      return;
-    }
-    // Prioritas 3: kombinasi invoice + nama EXACT (lowercase) sudah ada
-    if (cleanInv && cleanNm && existingInvoices.has(cleanInv) && existingInvNameKeys.has(`${cleanInv}:::${cleanNm}`)) {
-      console.log('[TarikSheet] SKIP baris', rowIdx+2, '- Inv+Nama sudah ada:', cleanInv, cleanNm);
-      return;
-    }
-    console.log('[TarikSheet] ✅ BARU ditemukan baris', rowIdx+2, name, barcode);
 
-    // Jika barcode kosong atau tanda strip '-', buatkan barcode unik otomatis
+    // Barcode unik otomatis jika kosong / '-' / 'AUTO'
     let finalBarcode = barcode;
     let isAutoBarcode = false;
     if (!finalBarcode || finalBarcode === '-' || finalBarcode === 'AUTO') {
       let candidate = `SP-${Math.floor(1000 + Math.random() * 9000)}`;
-      while (existingBarcodes.has(candidate) || generatedBarcodeSet.has(candidate)) {
+      while (allKnownBarcodes.has(candidate) || generatedBarcodeSet.has(candidate)) {
         candidate = `SP-${Math.floor(1000 + Math.random() * 9000)}`;
       }
       finalBarcode = candidate;
@@ -2720,14 +2759,17 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
       generatedBarcodeSet.add(cleanBc);
     }
 
-    // Parse kondisi
+    // Parse tanggal yang aman
+    const date = cleanDateString(rawDate) || getLocalDateString();
+
+    // Parse kondisi minus
     const isMinus = kondisiRaw.toLowerCase().includes('minus');
     let catatanMinus = '';
     if (isMinus) {
       catatanMinus = kondisiRaw.replace(/minus|\(|\)/gi, '').trim() || 'Minus fisik';
     }
 
-    // Status pembayaran: default selalu pre-paid (agar stok masuk tanpa potong kas lagi)
+    // Default status: pre-paid (agar tidak potong kas toko ganda)
     let status = 'pre-paid';
     if (statusRaw.includes('tempo') || statusRaw.includes('bon')) {
       status = 'tempo';
@@ -2735,9 +2777,11 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
       status = 'lunas';
     }
 
+    console.log(`[TarikSheet] ✅ BARU baris ${rowIdx + 2}: ${name} | Barcode: ${finalBarcode} | Faktur: ${invNo}`);
+
     newItems.push({
       invoiceNo: invNo,
-      date: date || getLocalDateString(),
+      date: date,
       supplierName: supplier,
       barcode: finalBarcode,
       isAutoBarcode: isAutoBarcode,
@@ -2748,7 +2792,8 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
       buyPrice: buyPrice,
       totalAmount: qty * buyPrice,
       status: status,
-      rowNumber: rowIdx + 2
+      rowNumber: rowIdx + 2,
+      sourceSheet: sourceSheet
     });
   });
 
@@ -2777,15 +2822,11 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
     newItems,
     groupedByInvoice,
     totalCount,
-    totalAmount
+    totalAmount,
+    sourceSheet
   };
 }
 
-/**
- * Menyimpan data barang masuk yang telah ditarik dari Google Sheets ke store database lokal
- * @param {object} store - Store instance
- * @param {Array} newItems - Array item baru dari fetchNewSuppliesFromGoogleSheets
- */
 export function commitImportedSupplies(store, newItems) {
   if (!newItems || newItems.length === 0) return { importedSupplies: 0, importedItems: 0 };
 

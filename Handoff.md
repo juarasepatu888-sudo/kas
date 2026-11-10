@@ -85,6 +85,10 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
      - Tombol **"Konfirmasi & Simpan ke Stok"** mengeksekusi penyimpanan ke database lokal dan memicu pembaruan KPI serta daftar kartu belanja secara real-time.
   3. Tombol pintasan **"Tarik Data Barang Masuk dari Spreadsheet"** juga ditambahkan di halaman Pengaturan toko di bawah integrasi Google Spreadsheet.
 
+- **Penyempurnaan Duplikasi & Fleksibilitas Input Ganda:**
+  - **Penghapusan Filter Inv+Nama:** Memperbaiki masalah di mana item baru yang nomor fakturnya sama dan nama sepatunya sama (misal membeli 5 pasang "CAT" atau "TB" dalam satu faktur) terblokir karena salah dianggap duplikat. Sekarang validasi duplikasi **hanya mengacu pada Barcode unik**. Nama sepatu yang sama dalam satu faktur sepenuhnya diperbolehkan.
+  - **Dukungan Dual-Tab:** Sistem memprioritaskan tab `Input Barang Baru` (dibersihkan otomatis setelah konfirmasi), dan secara cerdas otomatis beralih (*fallback*) ke tab `Barang Masuk (Belanja)` jika tab input belum dibuat atau kosong.
+
 ---
 
 ## Konteks Sebelumnya (Update 5 November 2026)

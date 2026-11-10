@@ -136,7 +136,7 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
               <span class="material-symbols-outlined text-emerald-400 text-2xl">cloud_download</span>
               <div>
                 <h3 class="font-bold text-sm text-on-surface">Validasi & Tarik Barang Masuk</h3>
-                <p class="text-[10px] text-on-surface-variant">Data baru dari tab <b>Input Barang Baru</b> di Spreadsheet</p>
+                <p id="pull-source-subtitle" class="text-[10px] text-on-surface-variant">Data baru dari Google Spreadsheet</p>
               </div>
             </div>
             <button type="button" id="btn-close-modal-pull" class="text-on-surface-variant hover:text-white p-1 rounded-lg">
@@ -560,7 +560,13 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
           }).join('');
         }
 
-        if (modalPull) modalPull.classList.remove('hidden');
+        if (modalPull) {
+          const subtitle = document.getElementById('pull-source-subtitle');
+          if (subtitle) {
+            subtitle.innerHTML = `Data baru terdeteksi dari tab <b>${result.sourceSheet}</b>`;
+          }
+          modalPull.classList.remove('hidden');
+        }
 
       } catch (err) {
         alert(`Gagal membaca data dari Google Sheets:\n\n${err.message}`);
@@ -585,24 +591,23 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
 
       try {
         btnConfirmPull.disabled = true;
-        btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Menyimpan...';
+        btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Menyimpan ke Stok...';
 
         const res = commitImportedSupplies(store, pendingImportItems);
+
+        // Bersihkan tab 'Input Barang Baru' jika sumbernya dari sana
+        const isFromInputSheet = pendingImportItems.some((it) => it.sourceSheet === 'Input Barang Baru');
+        if (isFromInputSheet) {
+          btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Membersihkan sheet...';
+          await clearInputSheet(store);
+        }
+
         closeModal();
 
         showToast(`Berhasil menambahkan ${res.importedItems} sepatu baru dari Spreadsheet!`, 'success');
 
         updateKpi();
         renderItems();
-
-        // Bersihkan tab 'Input Barang Baru' setelah berhasil disimpan
-        try {
-          btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Membersihkan input...';
-          await clearInputSheet(store);
-        } catch (clearErr) {
-          console.warn('Gagal bersihkan tab Input Barang Baru:', clearErr.message);
-          // Tidak perlu alert - ini bukan error kritis
-        }
       } catch (err) {
         alert(`Gagal menyimpan data import:\n\n${err.message}`);
         showToast('Gagal menyimpan barang masuk.', 'error');
