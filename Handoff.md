@@ -9,11 +9,49 @@ Aplikasi buku kas digital untuk toko sepatu yang mengelola transaksi penjualan, 
 - **Storage:** LocalStorage (untuk data lokal & foto produk)
 - **Barcode Scanner:** `html5-qrcode`
 
-## Konteks Terakhir (Update 5 November 2026)
+## Konteks Terakhir (Update 10 November 2026)
+
+### 1. Fix Total Pemotongan Saldo Kas pada Tambah Barang ke-2 dan Seterusnya
+**Waktu:** 10 November 2026  
+**Masalah yang Ditemukan:**
+Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form multi-item maupun tombol `+ Barang` / `isAppend`), saldo kas toko masih terpotong dan tercatat sebagai pengeluaran baru bernama `"Tambah Belanja: [Nama Sepatu]"`.
+
+**Penyebab:**
+1. **Auto-Rekonsiliasi Kas Keluar:** `migrateReconcileSupplyTransactions` di `store-migrations.js` & `store.js` otomatis menyuntikkan transaksi kas keluar untuk setiap item belanja indeks ke-2 ke atas (`idx > 0`) jika nominal transaksi kas keluar lebih kecil dari total faktur. Fungsi ini tidak mengecek apakah faktur tersebut sudah dibayar manual via `BIAYA BELANJA SEPATU`.
+2. **Sinkronisasi `updateSupply`:** Pada saat `updateSupply` dipanggil, sistem mencocokkan transaksi keluar berdasarkan `nota` tanpa memfilter kategori, sehingga dapat menimpa nominal kas keluar manual `BIAYA BELANJA SEPATU`.
+3. **Default Status Append:** Form tambah barang susulan (`isAppend`) sempat mewarisi status lama (`lunas`) dari database jika nota dibuat sebelum fitur `pre-paid` diperkenalkan.
+
+**Solusi & Perbaikan yang Diterapkan (`4429a36`):**
+1. **Default Status Selalu `pre-paid`:** Baik di form belanja baru maupun form tambah barang susulan (`isAppend`), status pembayaran secara default selalu **`pre-paid`** (kecuali jika nota aslinya berstatus `tempo`).
+2. **Proteksi Keterhubungan Faktur Kas Keluar:**
+   - Di `store.addSupply` & `store.addItemToSupply`: Sistem otomatis memeriksa apakah nomor faktur sudah pernah dicatat di Kas Keluar kategori `BIAYA BELANJA SEPATU`. Jika ya, status otomatis dipaksa menjadi `pre-paid` dan **sama sekali tidak akan memotong kas toko lagi**.
+3. **Pembersihan Otomatis Kas Keluar Duplikat:**
+   - Di `store-migrations.js` dan `store.js` (`migrateReconcileSupplyTransactions`): Menambahkan deteksi nota pre-paid. Jika nota berstatus `pre-paid` atau terhubung ke `BIAYA BELANJA SEPATU`, sistem secara otomatis membersihkan transaksi kas keluar duplikat (`Tambah Belanja: ...` / `Belanja Barang`) yang pernah terbuat otomatis.
+   - **Hasil:** Saldo kas toko yang sempat terpotong otomatis pulih dan kembali seimbang.
+4. **Isolasi `updateSupply`:** Hanya memperbarui nominal transaksi kas keluar jika statusnya `lunas` dan transaksinya memang berkategori `Belanja Barang` (bukan `BIAYA BELANJA SEPATU`).
+
+---
+
+### 2. Penyesuaian Teks Notifikasi Pending HPP di Halaman Laporan (`ca3b976`)
+- Menghapus keterangan tanggal statis `(tgl 25)` pada banner peringatan HPP pending di `src/pages/laporan.js`.
+- Teks diperbarui menjadi fleksibel: *"Saat barang tiba, input stok di menu Barang Masuk dengan nota [NO_FAKTUR] agar HPP per pasang otomatis terhitung"*.
+
+---
+
+### 3. Logika Card "RATA-RATA / HARI" di Widget Statistik Penjualan 7 Hari
+- **Rumus Perhitungan:**  
+  $$\text{Rata-rata Omset / Hari} = \frac{\text{Total Omset 7 Hari}}{7\text{ Hari}}$$  
+  Dibulatkan dengan `Math.round(totalRevenue / 7)`.
+- **Badge Bintang (`⭐ [Hari] ([Nominal])`):**  
+  Menampilkan hari dengan penjualan tertinggi (Puncak Omset) dalam rentang 7 hari terakhir beserta nominal singkatnya (misal: `⭐ Sel (1jt)`).
+
+---
+
+## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)
 **Waktu:** 5 November 2026  
-**Tujuan:** (1) Menghilangkan bentrok kas keluar ganda ketika belanja sepatu dibayar di awal (misal tgl 1) dan barang baru datang kemudian (tgl 25) lewat status `pre-paid`, (2) Membangun Laporan HPP (Harga Pokok Pembelian) otomatis yang menggabungkan `BIAYA BELANJA SEPATU` + `BIAYA ONGKIR BELANJA` dibagi total pasang sepatu.
+**Tujuan:** (1) Menghilangkan bentrok kas keluar ganda ketika belanja sepatu dibayar di awal (misal tgl 1) dan barang baru datang kemudian lewat status `pre-paid`, (2) Membangun Laporan HPP (Harga Pokok Pembelian) otomatis yang menggabungkan `BIAYA BELANJA SEPATU` + `BIAYA ONGKIR BELANJA` dibagi total pasang sepatu.
 
 **Poin-Poin Perbaikan & Fitur Baru:**
 1. **Opsi Status Pembayaran "Pre-Paid" (Sudah Dibayar Sebelumnya):**
