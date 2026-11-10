@@ -47,6 +47,13 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 
 ---
 
+### 4. Penguncian & Perlindungan Lebar Kolom Google Spreadsheet (`b71fa6e`)
+- **Masalah:** Ukuran kolom bawaan Google Sheets sebelumnya sempat ditimpa secara paksa dengan lebar statis kecil (`size: 85`), sehingga teks/angka panjang saling bertabrakan saat disinkronkan.
+- **Perbaikan:** Menghapus instruksi API `updateDimensionProperties` yang menimpa lebar kolom (`COLUMNS`).
+- **Hasil:** Lebar dan tata letak kolom yang telah dirapikan oleh pengguna di Google Spreadsheet sekarang **TERKUNCI PERMANEN**. Setiap kali transaksi bertambah atau kosong, sistem hanya memperbarui isi teks/angka tanpa pernah mengubah, menggeser, atau menimpa lebar kolom yang sudah rapi.
+
+---
+
 ## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)
