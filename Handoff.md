@@ -33,6 +33,10 @@ Aplikasi buku kas digital untuk toko sepatu yang mengelola transaksi penjualan, 
      - 4 KPI: HPP Rata-Rata/Psg, Total Belanja Pokok, Total Ongkir Belanja, Total Pasang Sepatu.
      - Collapsible list rincian per faktur: Tanggal, Suplier, Total Belanja, Total Ongkir, Grand Total Biaya, dan HPP Aktual per Pasang `(Beli + Ongkir / psg)`.
      - Sinkron otomatis saat filter faktur di atas diubah.
+5. **Fitur Status Pre-Paid pada Tambah Barang ke-2 dan Seterusnya (`isAppend`):**
+   - Mengaktifkan kartu pemilihan status pembayaran (`Pre-Paid`, `Lunas`, `Tempo`) pada mode tambah barang susulan / `+ Barang` (`isAppend`).
+   - `store.addItemToSupply`: Mendukung parameter status pembayaran, memastikan jika status `pre-paid` maka penambahan barang ke-2 dan seterusnya tidak memotong kas toko lagi.
+   - Sinkronisasi visual badge status di header belanja append.
 
 ---
 

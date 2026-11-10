@@ -299,7 +299,7 @@ export function renderTambahBarangMasukPage(store, params = {}) {
                 <span class="material-symbols-outlined text-primary text-[20px]">inventory</span>
                 <span class="font-title-ledger text-sm font-bold text-on-surface">Nota ${targetSupply.invoiceNo}</span>
               </div>
-              <span class="font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${targetSupply.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : targetSupply.status === 'pre-paid' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">
+              <span id="append-status-badge" class="font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${targetSupply.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : targetSupply.status === 'pre-paid' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">
                 ${targetSupply.status === 'lunas' ? 'Lunas' : targetSupply.status === 'pre-paid' ? 'Pre-Paid' : 'Tempo / Bon'}
               </span>
             </div>
@@ -427,43 +427,44 @@ export function renderTambahBarangMasukPage(store, params = {}) {
           <span>+ Tambah Sepatu Lain ke Suplier Ini</span>
         </button>
 
-        ${!isAppend ? `
-          <!-- Status Pembayaran Belanja (Pre-Paid utama / Lunas / Tempo) -->
- <div class="glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-3">
+        <!-- Status Pembayaran Belanja (Pre-Paid utama / Lunas / Tempo) -->
+        <div class="glass-card glass-sheen rounded-2xl p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
             <span class="font-label-md text-xs text-primary font-bold uppercase tracking-wider">Status Pembayaran Belanja</span>
+            ${isAppend ? `<span class="text-[10px] text-on-surface-variant font-medium">(Untuk barang tambahan ini)</span>` : ''}
+          </div>
 
-            <!-- Pre-Paid: pilihan utama full width di atas -->
-            <label class="status-radio-opt cursor-pointer p-3 rounded-xl border-2 ${defaultStatus === 'pre-paid' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2 w-full">
-              <input type="radio" name="supplyStatus" value="pre-paid" ${defaultStatus === 'pre-paid' ? 'checked' : ''} class="hidden"/>
-              <span class="material-symbols-outlined text-[20px]">history_edu</span>
-              <div class="flex flex-col flex-1">
-                <span class="font-label-md text-xs font-bold">💳 Pre-Paid / Sudah Dibayar Sebelumnya</span>
-                <span class="text-[10px] text-on-surface-variant">Kas keluar sudah dicatat manual sebelumnya — stok masuk tanpa potong kas lagi</span>
+          <!-- Pre-Paid: pilihan utama full width di atas -->
+          <label class="status-radio-opt cursor-pointer p-3 rounded-xl border-2 ${defaultStatus === 'pre-paid' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2 w-full">
+            <input type="radio" name="supplyStatus" value="pre-paid" ${defaultStatus === 'pre-paid' ? 'checked' : ''} class="hidden"/>
+            <span class="material-symbols-outlined text-[20px]">history_edu</span>
+            <div class="flex flex-col flex-1">
+              <span class="font-label-md text-xs font-bold">💳 Pre-Paid / Sudah Dibayar Sebelumnya</span>
+              <span class="text-[10px] text-on-surface-variant">Kas keluar sudah dicatat manual sebelumnya — stok masuk tanpa potong kas lagi</span>
+            </div>
+          </label>
+
+          <!-- Lunas & Tempo: 2 pilihan lain di bawah -->
+          <div class="grid grid-cols-2 gap-2">
+            <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'lunas' ? 'border-2 border-primary bg-secondary-container text-primary' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2">
+              <input type="radio" name="supplyStatus" value="lunas" ${defaultStatus === 'lunas' ? 'checked' : ''} class="hidden"/>
+              <span class="material-symbols-outlined text-[20px]">check_circle</span>
+              <div class="flex flex-col">
+                <span class="font-label-md text-xs font-bold">Lunas Tunai/BCA</span>
+                <span class="text-[10px] text-on-secondary-container">Potong kas sekarang</span>
               </div>
             </label>
 
-            <!-- Lunas & Tempo: 2 pilihan lain di bawah -->
-            <div class="grid grid-cols-2 gap-2">
- <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'lunas' ? 'border-2 border-primary bg-secondary-container text-primary' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2">
-                <input type="radio" name="supplyStatus" value="lunas" ${defaultStatus === 'lunas' ? 'checked' : ''} class="hidden"/>
-                <span class="material-symbols-outlined text-[20px]">check_circle</span>
-                <div class="flex flex-col">
-                  <span class="font-label-md text-xs font-bold">Lunas Tunai/BCA</span>
-                  <span class="text-[10px] text-on-secondary-container">Potong kas sekarang</span>
-                </div>
-              </label>
-
- <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'tempo' ? 'border-2 border-primary bg-secondary-container text-primary' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2">
-                <input type="radio" name="supplyStatus" value="tempo" ${defaultStatus === 'tempo' ? 'checked' : ''} class="hidden"/>
-                <span class="material-symbols-outlined text-[20px]">schedule</span>
-                <div class="flex flex-col">
-                  <span class="font-label-md text-xs font-bold">Tempo / Bon</span>
-                  <span class="text-[10px] text-on-surface-variant">Bayar nanti ke supplier</span>
-                </div>
-              </label>
-            </div>
+            <label class="status-radio-opt cursor-pointer p-3 rounded-xl border ${defaultStatus === 'tempo' ? 'border-2 border-primary bg-secondary-container text-primary' : 'glass-chip-btn text-on-surface-variant'} flex items-center gap-2">
+              <input type="radio" name="supplyStatus" value="tempo" ${defaultStatus === 'tempo' ? 'checked' : ''} class="hidden"/>
+              <span class="material-symbols-outlined text-[20px]">schedule</span>
+              <div class="flex flex-col">
+                <span class="font-label-md text-xs font-bold">Tempo / Bon</span>
+                <span class="text-[10px] text-on-surface-variant">Bayar nanti ke supplier</span>
+              </div>
+            </label>
           </div>
-        ` : ''}
+        </div>
 
         <!-- Total Belanja Summary & Submit Button -->
         <div class="glass-dark glass-sheen rounded-2xl p-4 flex items-center justify-between">
@@ -1425,11 +1426,30 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
   document.querySelectorAll('.status-radio-opt input').forEach((radio) => {
     radio.addEventListener('change', () => {
       document.querySelectorAll('.status-radio-opt').forEach((lbl) => {
- lbl.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border glass-chip-btn text-on-surface-variant flex items-center gap-2';
+        lbl.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border glass-chip-btn text-on-surface-variant flex items-center gap-2';
       });
       const parent = radio.closest('.status-radio-opt');
       if (parent) {
-        parent.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border-2 border-primary bg-secondary-container text-primary flex items-center gap-2';
+        if (radio.value === 'pre-paid') {
+          parent.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border-2 border-blue-500 bg-blue-50 text-blue-700 flex items-center gap-2 w-full';
+        } else {
+          parent.className = 'status-radio-opt cursor-pointer p-3 rounded-xl border-2 border-primary bg-secondary-container text-primary flex items-center gap-2';
+        }
+      }
+
+      // Update badge di header append jika ada
+      const appendBadge = document.getElementById('append-status-badge');
+      if (appendBadge) {
+        if (radio.value === 'pre-paid') {
+          appendBadge.className = 'font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-blue-100 text-blue-800';
+          appendBadge.textContent = 'Pre-Paid';
+        } else if (radio.value === 'lunas') {
+          appendBadge.className = 'font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800';
+          appendBadge.textContent = 'Lunas';
+        } else {
+          appendBadge.className = 'font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-amber-100 text-amber-800';
+          appendBadge.textContent = 'Tempo / Bon';
+        }
       }
     });
   });
@@ -1489,6 +1509,14 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
 
     // KASUS 1: APPEND KE NOTA SUPLIER YANG SUDAH ADA
     if (isAppend && targetSupply) {
+      const statusRadio = document.querySelector('input[name="supplyStatus"]:checked');
+      const appendStatus = statusRadio ? statusRadio.value : (targetSupply ? targetSupply.status : 'pre-paid');
+
+      // Perbarui status nota jika ada penyesuaian (misal: pre-paid)
+      store.updateSupply(targetSupply.id, {
+        status: appendStatus
+      });
+
       items.forEach((itemToAdd) => {
         store.addItemToSupply(targetSupply.id, {
           id: itemToAdd.id,
@@ -1499,7 +1527,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
           photo: itemToAdd.photo || null,
           qty: 1,
           buyPrice: Number(itemToAdd.buyPrice) || 185000
-        });
+        }, appendStatus);
       });
 
       showToast(`Berhasil menambahkan ${items.length} sepatu ke nota ${targetSupply.invoiceNo}!`, 'success');

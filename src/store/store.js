@@ -1042,7 +1042,7 @@ class Store {
     return null;
   }
 
-  addItemToSupply(id, newItem) {
+  addItemToSupply(id, newItem, appendStatus = null) {
     const idx = this.state.supplies.findIndex((s) => s.id === id);
     if (idx === -1) return null;
     const existing = this.state.supplies[idx];
@@ -1051,15 +1051,17 @@ class Store {
 
     const totalAmount = currentItems.reduce((sum, it) => sum + ((Number(it.buyPrice) || 0) * (Number(it.qty) || 1)), 0);
     const itemsCount = currentItems.reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
+    const effectiveStatus = appendStatus || existing.status || 'pre-paid';
 
     const updated = this.updateSupply(id, {
       items: currentItems,
       totalAmount: totalAmount,
-      itemsCount: itemsCount
+      itemsCount: itemsCount,
+      status: effectiveStatus
     });
 
-    // Record cash out if lunas (bukan pre-paid, karena pre-paid sudah dibayar sebelumnya)
-    if (existing.status === 'lunas') {
+    // Record cash out ONLY if effectiveStatus is 'lunas' (bukan pre-paid atau tempo)
+    if (effectiveStatus === 'lunas') {
       const addedAmount = (Number(newItem.buyPrice) || 0) * (Number(newItem.qty) || 1);
       this.addTransaction({
         type: 'keluar',
@@ -1070,7 +1072,7 @@ class Store {
         nota: existing.invoiceNo
       });
     }
-    // 'pre-paid': no additional cash out when appending items — payment already recorded manually
+    // 'pre-paid' & 'tempo': no additional cash out when appending items — payment already recorded manually or tempo
 
     return updated;
   }
