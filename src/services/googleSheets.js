@@ -1241,8 +1241,45 @@ export async function syncAllToGoogleSheets(store, explicitSpreadsheetId = null)
 
     const token = await getAccessToken(store);
 
-    const sheetNames = ['Dashboard', 'Ringkasan Usaha', 'Kas Masuk', 'Kas Keluar', 'Barang Masuk (Belanja)', 'Pengiriman', 'Investasi & Bagi Hasil', 'Statistik Harian'];
+    const sheetNames = ['Dashboard', 'Ringkasan Usaha', 'Kas Masuk', 'Kas Keluar', 'Barang Masuk (Belanja)', 'Pengiriman', 'Investasi & Bagi Hasil', 'Statistik Harian', 'Input Barang Baru'];
     const { locale = 'in_ID' } = (await ensureSheetsExist(token, spreadsheetId, sheetNames)) || {};
+
+    // Tulis header template ke tab 'Input Barang Baru' jika header kosong/hilang
+    try {
+      const inputSheetHeaderUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'Input Barang Baru'!A1:M1")}?valueRenderOption=UNFORMATTED_VALUE`;
+      const inputHeaderRes = await fetch(inputSheetHeaderUrl, { headers: { Authorization: `Bearer ${token}` } });
+      const inputHeaderData = await inputHeaderRes.json();
+      const existingHeader = (inputHeaderData.values || [])[0];
+      const expectedHeaderA = 'No. Faktur / ID';
+      if (!existingHeader || existingHeader[0] !== expectedHeaderA) {
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'Input Barang Baru'!A1")}:batchUpdate`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            valueInputOption: 'USER_ENTERED',
+            data: [{
+              range: "'Input Barang Baru'!A1:M1",
+              values: [[
+                'No. Faktur / ID',
+                'Tanggal (YYYY-MM-DD)',
+                'Supplier / Sumber',
+                'Barcode (Kosongkan = Auto)',
+                'Nama Sepatu / Barang ★',
+                'Kondisi (Bagus/Minus)',
+                'Jumlah Psg ★',
+                'Harga Modal (Rp) ★',
+                'Total Modal (auto)',
+                'Status (pre-paid/lunas/tempo)',
+                'Metode Bayar',
+                'Keterangan'
+              ]]
+            }]
+          })
+        });
+      }
+    } catch (e) {
+      console.warn('[Sheets] Gagal tulis header Input Barang Baru:', e.message);
+    }
 
     // Locale-aware formula separator (';' untuk regional Indonesia in_ID / id_ID, ',' untuk en_US)
     const isEn = locale.toLowerCase().startsWith('en') || locale.toLowerCase().startsWith('ja') || locale.toLowerCase().startsWith('zh');
@@ -2560,8 +2597,9 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
 
   const token = await getAccessToken(store);
 
-  // Baca baris data dari tab 'Barang Masuk (Belanja)' mulai dari A2 sampai baris 2500
-  const encodedRange = encodeURIComponent("'Barang Masuk (Belanja)'!A2:M2500");
+  // Baca baris data dari tab 'Input Barang Baru' (zona input manual aman dari auto-sync)
+  const INPUT_SHEET = "'Input Barang Baru'";
+  const encodedRange = encodeURIComponent(`${INPUT_SHEET}!A2:M2500`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedRange}?valueRenderOption=UNFORMATTED_VALUE`;
 
   const res = await fetch(url, {
@@ -2626,19 +2664,21 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
   const generatedBarcodeSet = new Set();
 
   rows.forEach((r, rowIdx) => {
-    // Index: 0=No, 1=No Faktur, 2=Tanggal, 3=Supplier, 4=Barcode, 5=Nama Sepatu, 6=Kondisi, 7=Qty, 8=Harga Modal, 9=Total Modal, 10=Status, 11=Metode, 12=Catatan
-    const invNo = (r[1] !== undefined && r[1] !== null) ? r[1].toString().trim() : '';
-    const date = (r[2] !== undefined && r[2] !== null) ? cleanDateString(r[2].toString().trim()) : getLocalDateString();
-    const supplier = (r[3] !== undefined && r[3] !== null) ? r[3].toString().trim() : 'Suplier Sepatu';
-    let barcode = (r[4] !== undefined && r[4] !== null) ? r[4].toString().trim() : '';
-    const name = (r[5] !== undefined && r[5] !== null) ? r[5].toString().trim() : '';
-    const kondisiRaw = (r[6] !== undefined && r[6] !== null) ? r[6].toString().trim() : 'Bagus';
-    const qty = Math.max(1, parseInt(r[7], 10) || 1);
-    const buyPrice = Number(r[8]) || Number(r[9]) || 185000;
-    const statusRaw = (r[10] !== undefined && r[10] !== null) ? r[10].toString().trim().toLowerCase() : '';
+    // Kolom tab 'Input Barang Baru':
+    // A(0)=NoFaktur, B(1)=Tanggal, C(2)=Supplier, D(3)=Barcode, E(4)=Nama Sepatu,
+    // F(5)=Kondisi, G(6)=Qty, H(7)=HargaModal, I(8)=TotalModal, J(9)=Status, K(10)=Metode, L(11)=Catatan
+    const invNo = (r[0] !== undefined && r[0] !== null) ? r[0].toString().trim() : '';
+    const date = (r[1] !== undefined && r[1] !== null) ? cleanDateString(r[1].toString().trim()) : getLocalDateString();
+    const supplier = (r[2] !== undefined && r[2] !== null) ? r[2].toString().trim() : 'Suplier Sepatu';
+    let barcode = (r[3] !== undefined && r[3] !== null) ? r[3].toString().trim() : '';
+    const name = (r[4] !== undefined && r[4] !== null) ? r[4].toString().trim() : '';
+    const kondisiRaw = (r[5] !== undefined && r[5] !== null) ? r[5].toString().trim() : 'Bagus';
+    const qty = Math.max(1, parseInt(r[6], 10) || 1);
+    const buyPrice = Number(r[7]) || Number(r[8]) || 185000;
+    const statusRaw = (r[9] !== undefined && r[9] !== null) ? r[9].toString().trim().toLowerCase() : '';
 
-    // Abaikan baris kosong, baris footer TOTAL, atau baris tanpa nama/faktur
-    if (!name || name.toUpperCase() === 'TOTAL' || name.toUpperCase().includes('TOTAL KAS') || !invNo) {
+    // Abaikan baris kosong atau baris tanpa nama/faktur wajib
+    if (!name || !invNo || name.trim() === '' || invNo.trim() === '') {
       return;
     }
 
@@ -2809,4 +2849,24 @@ export function commitImportedSupplies(store, newItems) {
     importedSupplies: supplyCount,
     importedItems: itemCount
   };
+}
+
+/**
+ * Bersihkan baris data di tab 'Input Barang Baru' setelah berhasil ditarik ke aplikasi.
+ * Row header (baris 1) TIDAK dihapus.
+ * @param {object} store - Store instance
+ * @param {number} rowCount - Jumlah baris data yang perlu dibersihkan
+ */
+export async function clearInputSheet(store) {
+  const config = store.getGoogleSheetsConfig ? store.getGoogleSheetsConfig() : {};
+  const rawId = config.spreadsheetId;
+  const cleanId = extractSpreadsheetId(rawId);
+  if (!cleanId) return;
+  const token = await getAccessToken(store);
+  const range = encodeURIComponent("'Input Barang Baru'!A2:M2500");
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${range}:clear`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: '{}'
+  });
 }

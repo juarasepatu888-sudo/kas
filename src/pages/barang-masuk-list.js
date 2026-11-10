@@ -1,7 +1,7 @@
 import { formatRupiah } from '../store/store.js';
 import { renderHeader, bindHeaderEvents } from '../components/header.js';
 import { showToast } from '../components/toast.js';
-import { fetchNewSuppliesFromGoogleSheets, commitImportedSupplies } from '../services/googleSheets.js';
+import { fetchNewSuppliesFromGoogleSheets, commitImportedSupplies, clearInputSheet } from '../services/googleSheets.js';
 
 export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin = true) {
   const supplies = store.getSupplies();
@@ -136,7 +136,7 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
               <span class="material-symbols-outlined text-emerald-400 text-2xl">cloud_download</span>
               <div>
                 <h3 class="font-bold text-sm text-on-surface">Validasi & Tarik Barang Masuk</h3>
-                <p class="text-[10px] text-on-surface-variant">Data baru terdeteksi dari Google Spreadsheet</p>
+                <p class="text-[10px] text-on-surface-variant">Data baru dari tab <b>Input Barang Baru</b> di Spreadsheet</p>
               </div>
             </div>
             <button type="button" id="btn-close-modal-pull" class="text-on-surface-variant hover:text-white p-1 rounded-lg">
@@ -163,7 +163,7 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
           <!-- Info Catatan Keuangan -->
           <div class="px-3.5 py-2 bg-blue-950/30 border-b border-blue-500/20 text-[11px] text-blue-200 flex items-start gap-1.5">
             <span class="material-symbols-outlined text-[15px] shrink-0 text-blue-400 mt-0.5">verified_user</span>
-            <span>Status otomatis diatur <b>Pre-Paid</b> (Stok bertambah ke katalog tanpa memotong saldo kas toko lagi).</span>
+            <span>Status otomatis diatur <b>Pre-Paid</b> (Stok bertambah ke katalog tanpa memotong saldo kas toko lagi). Setelah konfirmasi, tab <b>Input Barang Baru</b> dibersihkan otomatis.</span>
           </div>
 
           <!-- Body / List Preview (Scrollable) -->
@@ -577,7 +577,7 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
   }
 
   if (btnConfirmPull) {
-    btnConfirmPull.addEventListener('click', () => {
+    btnConfirmPull.addEventListener('click', async () => {
       if (!pendingImportItems || pendingImportItems.length === 0) {
         closeModal();
         return;
@@ -594,6 +594,15 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
 
         updateKpi();
         renderItems();
+
+        // Bersihkan tab 'Input Barang Baru' setelah berhasil disimpan
+        try {
+          btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Membersihkan input...';
+          await clearInputSheet(store);
+        } catch (clearErr) {
+          console.warn('Gagal bersihkan tab Input Barang Baru:', clearErr.message);
+          // Tidak perlu alert - ini bukan error kritis
+        }
       } catch (err) {
         alert(`Gagal menyimpan data import:\n\n${err.message}`);
         showToast('Gagal menyimpan barang masuk.', 'error');
