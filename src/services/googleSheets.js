@@ -2579,16 +2579,19 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
     return { newItems: [], groupedByInvoice: {}, totalCount: 0, totalAmount: 0 };
   }
 
-  // 1. Kumpulkan daftar barcode & invoice yang sudah ada di database lokal
-  const existingBarcodes = new Set();
-  const allProducts = store.getProducts ? store.getProducts() : [];
-  allProducts.forEach((p) => {
-    if (p.barcode) existingBarcodes.add(p.barcode.toString().trim().toUpperCase());
-  });
-
+  // 1. Kumpulkan daftar kunci duplikasi dari database lokal
+  //    Hanya kunci SPESIFIK (invNo+barcode) yang dipakai untuk cek duplikasi,
+  //    bukan cek global barcode di seluruh katalog produk (terlalu agresif).
   const existingSupplies = store.getSupplies ? store.getSupplies() : [];
-  const existingSupplyItemKeys = new Set();
-  const existingInvoices = new Map(); // invoiceNo -> supplyObj
+
+  // Kumpulkan: Set berisi "INVNO:::BARCODE" per item supply yang sudah ada
+  const existingInvBarcodeKeys = new Set();
+  // Kumpulkan: Set berisi "INVNO:::NAMALOWER" per item supply yang sudah ada
+  const existingInvNameKeys = new Set();
+  // Kumpulkan: barcode yang sudah terdaftar di supply items (BUKAN dari produk global)
+  const existingSupplyBarcodes = new Set();
+  // Map invoice -> supply object (untuk keperluan merge/append)
+  const existingInvoices = new Map();
 
   existingSupplies.forEach((s) => {
     const inv = (s.invoiceNo || '').trim().toUpperCase();
@@ -2597,16 +2600,18 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
       s.items.forEach((it) => {
         const bc = (it.barcode || '').toString().trim().toUpperCase();
         const nm = (it.name || '').trim().toLowerCase();
-        if (bc) {
-          existingBarcodes.add(bc);
-          if (inv) existingSupplyItemKeys.add(`${inv}:::${bc}`);
+        if (bc && bc !== '-' && !bc.startsWith('SP-')) {
+          // Hanya barcode non-auto yang dianggap unik secara global di supply
+          existingSupplyBarcodes.add(bc);
         }
-        if (inv && nm) {
-          existingSupplyItemKeys.add(`${inv}:::${nm}`);
-        }
+        if (inv && bc) existingInvBarcodeKeys.add(`${inv}:::${bc}`);
+        if (inv && nm) existingInvNameKeys.add(`${inv}:::${nm}`);
       });
     }
   });
+
+  // Set untuk barcode yang digenerate otomatis di sesi ini
+  const existingBarcodes = existingSupplyBarcodes; // alias untuk kompatibilitas
 
   // 2. Filter baris baru yang belum tercatat
   const newItems = [];
@@ -2633,15 +2638,19 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
     const cleanInv = invNo.toUpperCase();
     const cleanNm = name.toLowerCase();
 
-    // Cek apakah barcode sudah ada di database lokal
-    if (cleanBc && existingBarcodes.has(cleanBc)) {
-      return; // Sudah tercatat
+    // Cek duplikasi: hanya berdasarkan barcode spesifik milik supply items (bukan katalog global)
+    // Prioritas 1: barcode explicit (non-auto) sudah ada di supply items
+    if (cleanBc && cleanBc !== '-' && !cleanBc.startsWith('SP-') && existingSupplyBarcodes.has(cleanBc)) {
+      return; // Barcode ini sudah tercatat di supply database
     }
-    if (cleanInv && cleanBc && existingSupplyItemKeys.has(`${cleanInv}:::${cleanBc}`)) {
-      return; // Sudah tercatat
+    // Prioritas 2: kombinasi invoice + barcode sudah ada
+    if (cleanInv && cleanBc && existingInvBarcodeKeys.has(`${cleanInv}:::${cleanBc}`)) {
+      return; // Item dengan barcode ini sudah ada di faktur ini
     }
-    if (cleanInv && cleanNm && existingSupplyItemKeys.has(`${cleanInv}:::${cleanNm}`)) {
-      return; // Sudah tercatat pada nota ini
+    // Prioritas 3: kombinasi invoice + nama EXACT (lowercase) sudah ada
+    // Hanya berlaku jika faktur tersebut sudah ada di sistem
+    if (cleanInv && cleanNm && existingInvoices.has(cleanInv) && existingInvNameKeys.has(`${cleanInv}:::${cleanNm}`)) {
+      return; // Nama persis sama sudah ada di faktur ini
     }
 
     // Jika barcode kosong atau tanda strip '-', buatkan barcode unik otomatis
