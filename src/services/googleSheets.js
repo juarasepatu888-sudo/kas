@@ -2575,6 +2575,10 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
 
   const data = await res.json();
   const rows = data.values || [];
+  // ── DEBUG LOG: lihat data mentah dari spreadsheet ──
+  console.log('[TarikSheet] Total baris terbaca dari spreadsheet:', rows.length);
+  console.log('[TarikSheet] 5 baris pertama:', JSON.stringify(rows.slice(0, 5)));
+  console.log('[TarikSheet] 5 baris terakhir:', JSON.stringify(rows.slice(-5)));
   if (rows.length === 0) {
     return { newItems: [], groupedByInvoice: {}, totalCount: 0, totalAmount: 0 };
   }
@@ -2612,6 +2616,10 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
 
   // Set untuk barcode yang digenerate otomatis di sesi ini
   const existingBarcodes = existingSupplyBarcodes; // alias untuk kompatibilitas
+  // ── DEBUG LOG: lihat data lokal ──
+  console.log('[TarikSheet] Supply lokal di DB:', existingSupplies.length, 'nota');
+  console.log('[TarikSheet] Barcode lokal di supply:', [...existingSupplyBarcodes].slice(0, 10));
+  console.log('[TarikSheet] Invoice lokal:', [...existingInvoices.keys()].slice(0, 10));
 
   // 2. Filter baris baru yang belum tercatat
   const newItems = [];
@@ -2638,20 +2646,24 @@ export async function fetchNewSuppliesFromGoogleSheets(store) {
     const cleanInv = invNo.toUpperCase();
     const cleanNm = name.toLowerCase();
 
-    // Cek duplikasi: hanya berdasarkan barcode spesifik milik supply items (bukan katalog global)
+    // Cek duplikasi
+    console.log('[TarikSheet] Baris', rowIdx+2, '| invNo:', invNo, '| name:', name, '| barcode:', barcode);
     // Prioritas 1: barcode explicit (non-auto) sudah ada di supply items
     if (cleanBc && cleanBc !== '-' && !cleanBc.startsWith('SP-') && existingSupplyBarcodes.has(cleanBc)) {
-      return; // Barcode ini sudah tercatat di supply database
+      console.log('[TarikSheet] SKIP baris', rowIdx+2, '- Barcode sudah ada di supply:', cleanBc);
+      return;
     }
     // Prioritas 2: kombinasi invoice + barcode sudah ada
     if (cleanInv && cleanBc && existingInvBarcodeKeys.has(`${cleanInv}:::${cleanBc}`)) {
-      return; // Item dengan barcode ini sudah ada di faktur ini
+      console.log('[TarikSheet] SKIP baris', rowIdx+2, '- Inv+Barcode sudah ada:', cleanInv, cleanBc);
+      return;
     }
     // Prioritas 3: kombinasi invoice + nama EXACT (lowercase) sudah ada
-    // Hanya berlaku jika faktur tersebut sudah ada di sistem
     if (cleanInv && cleanNm && existingInvoices.has(cleanInv) && existingInvNameKeys.has(`${cleanInv}:::${cleanNm}`)) {
-      return; // Nama persis sama sudah ada di faktur ini
+      console.log('[TarikSheet] SKIP baris', rowIdx+2, '- Inv+Nama sudah ada:', cleanInv, cleanNm);
+      return;
     }
+    console.log('[TarikSheet] ✅ BARU ditemukan baris', rowIdx+2, name, barcode);
 
     // Jika barcode kosong atau tanda strip '-', buatkan barcode unik otomatis
     let finalBarcode = barcode;
