@@ -391,6 +391,14 @@ export function renderPengaturanPage(store, isAdmin = true) {
               <span id="text-sync-btn">Sinkronkan Sekarang</span>
             </button>
           </div>
+          <button 
+            type="button" 
+            id="btn-goto-tarik-pasok-pengaturan" 
+            class="w-full py-1.5 px-2.5 rounded-lg border border-emerald-500/40 text-emerald-800 font-label-md text-[11px] font-bold flex items-center justify-center gap-1 mt-1 hover:bg-emerald-500/10 active:scale-[0.99] transition"
+          >
+            <span class="material-symbols-outlined text-[15px] text-emerald-700">cloud_download</span>
+            <span>Tarik Data Barang Masuk dari Spreadsheet</span>
+          </button>
         </section>
         ` : `
         <!-- Google Spreadsheet Card (Mode Atasan: Hanya Akses Buka Sheet & Status) -->
@@ -1060,6 +1068,13 @@ export function initPengaturanPage(router, store, isAdmin = true) {
           <span>Sinkronkan Sekarang</span>
         `;
       }
+    });
+  }
+
+  const btnGotoTarik = document.getElementById('btn-goto-tarik-pasok-pengaturan');
+  if (btnGotoTarik) {
+    btnGotoTarik.addEventListener('click', () => {
+      router.navigate('barang-masuk');
     });
   }
 

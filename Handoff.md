@@ -63,6 +63,30 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 
 ---
 
+### 6. Fitur Tarik Data Barang Masuk dari Google Spreadsheet & Sistem Validasi Preview
+- **Tujuan:** Mengizinkan penginputan data stok barang masuk melalui Google Spreadsheet (misal saat unboxing atau sortir offline di laptop/komputer oleh tim gudang), lalu ditarik ke aplikasi kas secara aman dan terverifikasi.
+- **Implementasi Layanan (`src/services/googleSheets.js`):**
+  1. `fetchNewSuppliesFromGoogleSheets(store)`:
+     - Membaca baris dari tab `'Barang Masuk (Belanja)'!A2:M2500`.
+     - **Penyaringan Duplikasi Ketat:** Memeriksa seluruh barcode yang sudah terdaftar di katalog produk dan composite key (`invoiceNo:::barcode` & `invoiceNo:::name`). Baris yang sudah ada dilewati otomatis.
+     - **Auto-Generate Barcode:** Jika kolom Barcode di spreadsheet kosong, `-`, atau `AUTO`, otomatis membuat barcode unik acak dengan format `SP-XXXX`.
+     - **Default Pre-Paid:** Status otomatis diatur `pre-paid` agar stok bertambah ke katalog tanpa mengurangi saldo kas toko ganda.
+     - Mengembalikan data terkelompok per nomor faktur, total pasang, dan total modal.
+  2. `commitImportedSupplies(store, newItems)`:
+     - Jika faktur sudah ada di aplikasi: item baru dimasukkan ke faktur tersebut via `store.addItemToSupply` dengan status pre-paid.
+     - Jika faktur baru: dibuat transaksi pasok baru via `store.addSupply`.
+     - Katalog master produk (`products`) dan stok real-time otomatis diperbarui.
+- **Implementasi Antarmuka UI (`src/pages/barang-masuk-list.js` & `src/pages/pengaturan.js`):**
+  1. Tombol **"Tarik Spreadsheet"** di halaman Belanja & Stok berdampingan dengan tombol Stock Opname.
+  2. **Modal Validasi & Preview:**
+     - Menampilkan indikator loading saat membaca Google Sheets.
+     - Jika tidak ada data baru, memunculkan notifikasi info bahwa semua data sudah tersinkron.
+     - Jika ada data baru, membuka pop-up preview interaktif yang merinci total pasang, total modal, faktur yang terlibat, serta daftar sepatu lengkap dengan status kondisi fisik, barcode (label Auto-Barcode jika otomatis), dan nomor baris spreadsheet aslinya.
+     - Tombol **"Konfirmasi & Simpan ke Stok"** mengeksekusi penyimpanan ke database lokal dan memicu pembaruan KPI serta daftar kartu belanja secara real-time.
+  3. Tombol pintasan **"Tarik Data Barang Masuk dari Spreadsheet"** juga ditambahkan di halaman Pengaturan toko di bawah integrasi Google Spreadsheet.
+
+---
+
 ## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)

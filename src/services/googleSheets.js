@@ -2543,3 +2543,249 @@ export async function syncAllToGoogleSheets(store, explicitSpreadsheetId = null)
   }
 }
 
+
+
+/**
+ * Membaca data barang masuk dari Google Spreadsheet tab 'Barang Masuk (Belanja)'
+ * Membandingkan dengan database lokal untuk menemukan item-item yang baru diinput di spreadsheet
+ * @returns {Promise<{ newItems: Array, groupedByInvoice: Object, totalCount: number, totalAmount: number }>}
+ */
+export async function fetchNewSuppliesFromGoogleSheets(store) {
+  const config = store.getGoogleSheetsConfig ? store.getGoogleSheetsConfig() : {};
+  const rawId = config.spreadsheetId;
+  const cleanId = extractSpreadsheetId(rawId);
+  if (!cleanId) {
+    throw new Error('Link atau ID Google Spreadsheet belum diatur di menu Pengaturan.');
+  }
+
+  const token = await getAccessToken(store);
+
+  // Baca baris data dari tab 'Barang Masuk (Belanja)' mulai dari A2 sampai baris 2500
+  const encodedRange = encodeURIComponent("'Barang Masuk (Belanja)'!A2:M2500");
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedRange}?valueRenderOption=UNFORMATTED_VALUE`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Gagal membaca sheet 'Barang Masuk (Belanja)' (${res.status})`);
+  }
+
+  const data = await res.json();
+  const rows = data.values || [];
+  if (rows.length === 0) {
+    return { newItems: [], groupedByInvoice: {}, totalCount: 0, totalAmount: 0 };
+  }
+
+  // 1. Kumpulkan daftar barcode & invoice yang sudah ada di database lokal
+  const existingBarcodes = new Set();
+  const allProducts = store.getProducts ? store.getProducts() : [];
+  allProducts.forEach((p) => {
+    if (p.barcode) existingBarcodes.add(p.barcode.toString().trim().toUpperCase());
+  });
+
+  const existingSupplies = store.getSupplies ? store.getSupplies() : [];
+  const existingSupplyItemKeys = new Set();
+  const existingInvoices = new Map(); // invoiceNo -> supplyObj
+
+  existingSupplies.forEach((s) => {
+    const inv = (s.invoiceNo || '').trim().toUpperCase();
+    if (inv) existingInvoices.set(inv, s);
+    if (Array.isArray(s.items)) {
+      s.items.forEach((it) => {
+        const bc = (it.barcode || '').toString().trim().toUpperCase();
+        const nm = (it.name || '').trim().toLowerCase();
+        if (bc) {
+          existingBarcodes.add(bc);
+          if (inv) existingSupplyItemKeys.add(`${inv}:::${bc}`);
+        }
+        if (inv && nm) {
+          existingSupplyItemKeys.add(`${inv}:::${nm}`);
+        }
+      });
+    }
+  });
+
+  // 2. Filter baris baru yang belum tercatat
+  const newItems = [];
+  const generatedBarcodeSet = new Set();
+
+  rows.forEach((r, rowIdx) => {
+    // Index: 0=No, 1=No Faktur, 2=Tanggal, 3=Supplier, 4=Barcode, 5=Nama Sepatu, 6=Kondisi, 7=Qty, 8=Harga Modal, 9=Total Modal, 10=Status, 11=Metode, 12=Catatan
+    const invNo = (r[1] !== undefined && r[1] !== null) ? r[1].toString().trim() : '';
+    const date = (r[2] !== undefined && r[2] !== null) ? cleanDateString(r[2].toString().trim()) : getLocalDateString();
+    const supplier = (r[3] !== undefined && r[3] !== null) ? r[3].toString().trim() : 'Suplier Sepatu';
+    let barcode = (r[4] !== undefined && r[4] !== null) ? r[4].toString().trim() : '';
+    const name = (r[5] !== undefined && r[5] !== null) ? r[5].toString().trim() : '';
+    const kondisiRaw = (r[6] !== undefined && r[6] !== null) ? r[6].toString().trim() : 'Bagus';
+    const qty = Math.max(1, parseInt(r[7], 10) || 1);
+    const buyPrice = Number(r[8]) || Number(r[9]) || 185000;
+    const statusRaw = (r[10] !== undefined && r[10] !== null) ? r[10].toString().trim().toLowerCase() : '';
+
+    // Abaikan baris kosong, baris footer TOTAL, atau baris tanpa nama/faktur
+    if (!name || name.toUpperCase() === 'TOTAL' || name.toUpperCase().includes('TOTAL KAS') || !invNo) {
+      return;
+    }
+
+    const cleanBc = barcode.toUpperCase();
+    const cleanInv = invNo.toUpperCase();
+    const cleanNm = name.toLowerCase();
+
+    // Cek apakah barcode sudah ada di database lokal
+    if (cleanBc && existingBarcodes.has(cleanBc)) {
+      return; // Sudah tercatat
+    }
+    if (cleanInv && cleanBc && existingSupplyItemKeys.has(`${cleanInv}:::${cleanBc}`)) {
+      return; // Sudah tercatat
+    }
+    if (cleanInv && cleanNm && existingSupplyItemKeys.has(`${cleanInv}:::${cleanNm}`)) {
+      return; // Sudah tercatat pada nota ini
+    }
+
+    // Jika barcode kosong atau tanda strip '-', buatkan barcode unik otomatis
+    let finalBarcode = barcode;
+    let isAutoBarcode = false;
+    if (!finalBarcode || finalBarcode === '-' || finalBarcode === 'AUTO') {
+      let candidate = `SP-${Math.floor(1000 + Math.random() * 9000)}`;
+      while (existingBarcodes.has(candidate) || generatedBarcodeSet.has(candidate)) {
+        candidate = `SP-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+      finalBarcode = candidate;
+      isAutoBarcode = true;
+      generatedBarcodeSet.add(candidate);
+    } else {
+      generatedBarcodeSet.add(cleanBc);
+    }
+
+    // Parse kondisi
+    const isMinus = kondisiRaw.toLowerCase().includes('minus');
+    let catatanMinus = '';
+    if (isMinus) {
+      catatanMinus = kondisiRaw.replace(/minus|\(|\)/gi, '').trim() || 'Minus fisik';
+    }
+
+    // Status pembayaran: default selalu pre-paid (agar stok masuk tanpa potong kas lagi)
+    let status = 'pre-paid';
+    if (statusRaw.includes('tempo') || statusRaw.includes('bon')) {
+      status = 'tempo';
+    } else if (statusRaw.includes('lunas') && !statusRaw.includes('pre')) {
+      status = 'lunas';
+    }
+
+    newItems.push({
+      invoiceNo: invNo,
+      date: date || getLocalDateString(),
+      supplierName: supplier,
+      barcode: finalBarcode,
+      isAutoBarcode: isAutoBarcode,
+      name: name,
+      kondisi: isMinus ? 'Minus' : 'Bagus',
+      catatanMinus: catatanMinus,
+      qty: qty,
+      buyPrice: buyPrice,
+      totalAmount: qty * buyPrice,
+      status: status,
+      rowNumber: rowIdx + 2
+    });
+  });
+
+  // Kelompokkan per-nomor faktur
+  const groupedByInvoice = {};
+  let totalCount = 0;
+  let totalAmount = 0;
+
+  newItems.forEach((it) => {
+    const key = it.invoiceNo;
+    if (!groupedByInvoice[key]) {
+      groupedByInvoice[key] = {
+        invoiceNo: it.invoiceNo,
+        supplierName: it.supplierName,
+        date: it.date,
+        status: it.status,
+        items: []
+      };
+    }
+    groupedByInvoice[key].items.push(it);
+    totalCount += it.qty;
+    totalAmount += it.totalAmount;
+  });
+
+  return {
+    newItems,
+    groupedByInvoice,
+    totalCount,
+    totalAmount
+  };
+}
+
+/**
+ * Menyimpan data barang masuk yang telah ditarik dari Google Sheets ke store database lokal
+ * @param {object} store - Store instance
+ * @param {Array} newItems - Array item baru dari fetchNewSuppliesFromGoogleSheets
+ */
+export function commitImportedSupplies(store, newItems) {
+  if (!newItems || newItems.length === 0) return { importedSupplies: 0, importedItems: 0 };
+
+  const grouped = {};
+  newItems.forEach((it) => {
+    if (!grouped[it.invoiceNo]) {
+      grouped[it.invoiceNo] = {
+        invoiceNo: it.invoiceNo,
+        supplierName: it.supplierName,
+        date: it.date,
+        status: it.status || 'pre-paid',
+        items: []
+      };
+    }
+    grouped[it.invoiceNo].items.push({
+      id: `item-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      barcode: it.barcode,
+      name: it.name,
+      kondisi: it.kondisi || 'Bagus',
+      catatanMinus: it.catatanMinus || '',
+      qty: it.qty || 1,
+      buyPrice: it.buyPrice || 185000,
+      photo: null
+    });
+  });
+
+  const existingSupplies = store.getSupplies ? store.getSupplies() : [];
+  let supplyCount = 0;
+  let itemCount = 0;
+
+  Object.values(grouped).forEach((grp) => {
+    const existing = existingSupplies.find(
+      (s) => (s.invoiceNo || '').trim().toUpperCase() === grp.invoiceNo.trim().toUpperCase()
+    );
+
+    if (existing) {
+      // Nota sudah ada di sistem -> Tambahkan item baru ke nota ini
+      grp.items.forEach((it) => {
+        store.addItemToSupply(existing.id, it, grp.status || 'pre-paid');
+        itemCount += (it.qty || 1);
+      });
+    } else {
+      // Nota baru -> Tambahkan supply baru
+      const totalAmt = grp.items.reduce((s, it) => s + ((it.buyPrice || 0) * (it.qty || 1)), 0);
+      const totalQty = grp.items.reduce((s, it) => s + (it.qty || 1), 0);
+      store.addSupply({
+        invoiceNo: grp.invoiceNo,
+        supplierName: grp.supplierName,
+        date: grp.date,
+        status: grp.status || 'pre-paid',
+        itemsCount: totalQty,
+        totalAmount: totalAmt,
+        items: grp.items
+      });
+      supplyCount++;
+      itemCount += totalQty;
+    }
+  });
+
+  return {
+    importedSupplies: supplyCount,
+    importedItems: itemCount
+  };
+}

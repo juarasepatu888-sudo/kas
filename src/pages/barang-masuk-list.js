@@ -1,6 +1,7 @@
 import { formatRupiah } from '../store/store.js';
 import { renderHeader, bindHeaderEvents } from '../components/header.js';
 import { showToast } from '../components/toast.js';
+import { fetchNewSuppliesFromGoogleSheets, commitImportedSupplies } from '../services/googleSheets.js';
 
 export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin = true) {
   const supplies = store.getSupplies();
@@ -71,14 +72,25 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
           </button>
         </div>
 
-        ${isAdmin ? `<button 
-          type="button" 
-          id="btn-goto-stock-opname"
-          class="glass-card glass-sheen h-9 border border-neutral-700/60 hover:border-neutral-500 rounded-lg flex items-center justify-center gap-1 font-label-md text-[11px] text-neutral-300 active:scale-[0.99]"
-        >
-          <span class="material-symbols-outlined text-[14px] text-emerald-400">fact_check</span>
-          <span>Stock Opname (Cek Fisik Sepatu)</span>
-        </button>` : ''}
+        ${isAdmin ? `<div class="grid grid-cols-2 gap-2">
+          <button 
+            type="button" 
+            id="btn-goto-stock-opname"
+            class="glass-card glass-sheen h-9 border border-neutral-700/60 hover:border-neutral-500 rounded-lg flex items-center justify-center gap-1 font-label-md text-[11px] text-neutral-300 active:scale-[0.99]"
+          >
+            <span class="material-symbols-outlined text-[15px] text-emerald-400">fact_check</span>
+            <span>Stock Opname</span>
+          </button>
+          <button 
+            type="button" 
+            id="btn-pull-sheets-supplies"
+            class="glass-card glass-sheen h-9 border border-emerald-500/40 hover:border-emerald-400 rounded-lg flex items-center justify-center gap-1 font-label-md text-[11px] text-emerald-300 active:scale-[0.99]"
+            title="Tarik data belanja/sepatu baru dari Google Spreadsheet"
+          >
+            <span class="material-symbols-outlined text-[16px] text-emerald-400" id="icon-pull-sheets">cloud_download</span>
+            <span class="font-bold" id="label-pull-sheets">Tarik Spreadsheet</span>
+          </button>
+        </div>` : ''}
 
         <!-- Search Bar -->
         <div class="relative w-full">
@@ -112,6 +124,63 @@ export function renderBarangMasukListPage(store, filterStatus = 'all', isAdmin =
         <!-- Invoices/Belanja List Container -->
         <div id="pasok-list-container" class="flex flex-col gap-2">
           <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Modal Konfirmasi Tarik dari Spreadsheet -->
+      <div id="modal-pull-sheets" class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 hidden">
+        <div class="glass-card border border-emerald-500/40 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+          <!-- Header -->
+          <div class="p-3.5 border-b border-white/10 flex items-center justify-between bg-surface/90">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-emerald-400 text-2xl">cloud_download</span>
+              <div>
+                <h3 class="font-bold text-sm text-on-surface">Validasi & Tarik Barang Masuk</h3>
+                <p class="text-[10px] text-on-surface-variant">Data baru terdeteksi dari Google Spreadsheet</p>
+              </div>
+            </div>
+            <button type="button" id="btn-close-modal-pull" class="text-on-surface-variant hover:text-white p-1 rounded-lg">
+              <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
+
+          <!-- Ringkasan Statistik -->
+          <div class="p-3 bg-emerald-950/30 border-b border-emerald-500/20 grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="bg-surface/50 p-1.5 rounded-lg border border-emerald-500/20">
+              <div class="text-[10px] text-on-surface-variant">Total Item</div>
+              <div id="pull-summary-count" class="font-bold text-emerald-300 font-tabular text-sm">0 Psg</div>
+            </div>
+            <div class="bg-surface/50 p-1.5 rounded-lg border border-emerald-500/20">
+              <div class="text-[10px] text-on-surface-variant">Total Nilai Modal</div>
+              <div id="pull-summary-amount" class="font-bold text-primary font-tabular text-sm">Rp 0</div>
+            </div>
+            <div class="bg-surface/50 p-1.5 rounded-lg border border-emerald-500/20">
+              <div class="text-[10px] text-on-surface-variant">Faktur/Nota</div>
+              <div id="pull-summary-invoices" class="font-bold text-white font-tabular text-sm">0 Faktur</div>
+            </div>
+          </div>
+
+          <!-- Info Catatan Keuangan -->
+          <div class="px-3.5 py-2 bg-blue-950/30 border-b border-blue-500/20 text-[11px] text-blue-200 flex items-start gap-1.5">
+            <span class="material-symbols-outlined text-[15px] shrink-0 text-blue-400 mt-0.5">verified_user</span>
+            <span>Status otomatis diatur <b>Pre-Paid</b> (Stok bertambah ke katalog tanpa memotong saldo kas toko lagi).</span>
+          </div>
+
+          <!-- Body / List Preview (Scrollable) -->
+          <div id="pull-items-preview-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5 max-h-[50vh]">
+            <!-- Item list dynamically generated -->
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="p-3 border-t border-white/10 flex items-center justify-end gap-2 bg-surface/90">
+            <button type="button" id="btn-cancel-pull" class="px-3 py-1.5 rounded-lg border border-neutral-700 text-xs text-neutral-300 hover:bg-neutral-800 transition">
+              Batal
+            </button>
+            <button type="button" id="btn-confirm-pull" class="glass-primary glass-btn px-4 py-1.5 rounded-lg text-primary-btn text-xs font-bold flex items-center gap-1 active:scale-95 transition">
+              <span class="material-symbols-outlined text-sm">check_circle</span>
+              <span>Konfirmasi & Simpan ke Stok</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -387,6 +456,151 @@ export function initBarangMasukListPage(router, store, initialFilter = 'all', is
           else expandedSupplies.add(supplyId);
         }
       });
+    });
+  }
+
+
+  // ── Tarik Data Barang Masuk dari Google Spreadsheet ──
+  const btnPullSheets = document.getElementById('btn-pull-sheets-supplies');
+  const modalPull = document.getElementById('modal-pull-sheets');
+  const btnCloseModal = document.getElementById('btn-close-modal-pull');
+  const btnCancelPull = document.getElementById('btn-cancel-pull');
+  const btnConfirmPull = document.getElementById('btn-confirm-pull');
+  const previewContainer = document.getElementById('pull-items-preview-list');
+  const summaryCount = document.getElementById('pull-summary-count');
+  const summaryAmount = document.getElementById('pull-summary-amount');
+  const summaryInvoices = document.getElementById('pull-summary-invoices');
+
+  let pendingImportItems = [];
+
+  function closeModal() {
+    if (modalPull) modalPull.classList.add('hidden');
+    pendingImportItems = [];
+  }
+
+  if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
+  if (btnCancelPull) btnCancelPull.addEventListener('click', closeModal);
+
+  if (btnPullSheets) {
+    btnPullSheets.addEventListener('click', async () => {
+      const icon = document.getElementById('icon-pull-sheets');
+      const label = document.getElementById('label-pull-sheets');
+      
+      try {
+        btnPullSheets.disabled = true;
+        if (icon) {
+          icon.textContent = 'sync';
+          icon.classList.add('animate-spin');
+        }
+        if (label) label.textContent = 'Membaca Sheet...';
+
+        const result = await fetchNewSuppliesFromGoogleSheets(store);
+        const { newItems, groupedByInvoice, totalCount, totalAmount } = result;
+
+        if (!newItems || newItems.length === 0) {
+          showToast('Tidak ada data barang masuk baru di Google Sheets. Semua data sudah tersinkron!', 'info');
+          return;
+        }
+
+        // Simpan data pending untuk di-commit saat user klik konfirmasi
+        pendingImportItems = newItems;
+
+        // Render data ke modal preview
+        if (summaryCount) summaryCount.textContent = `${totalCount} Psg`;
+        if (summaryAmount) summaryAmount.textContent = formatRupiah(totalAmount);
+        if (summaryInvoices) summaryInvoices.textContent = `${Object.keys(groupedByInvoice).length} Faktur`;
+
+        if (previewContainer) {
+          previewContainer.innerHTML = Object.values(groupedByInvoice).map((grp) => {
+            const invoiceItems = grp.items || [];
+            const subtotal = invoiceItems.reduce((s, it) => s + it.totalAmount, 0);
+            return `
+              <div class="glass-panel rounded-xl p-2.5 border border-white/10 flex flex-col gap-2">
+                <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px] text-primary">receipt_long</span>
+                    <span class="font-bold text-xs text-on-surface">${grp.invoiceNo}</span>
+                    <span class="text-[10px] text-on-surface-variant font-medium">(${grp.supplierName || 'Supplier'})</span>
+                  </div>
+                  <div class="text-[10px] text-right">
+                    <span class="text-on-surface-variant">${grp.date} • </span>
+                    <span class="font-bold text-primary">${formatRupiah(subtotal)}</span>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  ${invoiceItems.map((it) => `
+                    <div class="flex items-center justify-between bg-surface/40 p-1.5 rounded-lg text-[11px]">
+                      <div class="flex-1 min-w-0 pr-2">
+                        <div class="font-semibold text-on-surface truncate">${it.name}</div>
+                        <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+                          <span class="inline-flex items-center gap-0.5 px-1 py-0.2 rounded glass-chip text-on-surface text-[9px] font-mono font-bold">
+                            <span class="material-symbols-outlined text-[9px] text-primary">qr_code</span>
+                            ${it.barcode}
+                          </span>
+                          ${it.isAutoBarcode ? `
+                            <span class="inline-flex items-center px-1 py-0.2 rounded text-[8.5px] font-bold bg-amber-950/60 border border-amber-500/30 text-amber-300">
+                              Auto-Barcode
+                            </span>
+                          ` : ''}
+                          <span class="inline-flex items-center px-1 py-0.2 rounded text-[9px] font-bold glass-chip ${it.kondisi === 'Minus' ? 'text-amber-400' : 'text-emerald-400'}">
+                            ${it.kondisi === 'Minus' ? '⚠ Minus' : '✓ Bagus'}
+                          </span>
+                          <span class="text-[9px] text-neutral-400">Baris #${it.rowNumber}</span>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <span class="font-bold font-tabular text-primary text-[11px]">${it.qty}x ${formatRupiah(it.buyPrice)}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        if (modalPull) modalPull.classList.remove('hidden');
+
+      } catch (err) {
+        alert(`Gagal membaca data dari Google Sheets:\n\n${err.message}`);
+        showToast('Gagal menarik data dari Google Sheets.', 'error');
+      } finally {
+        btnPullSheets.disabled = false;
+        if (icon) {
+          icon.textContent = 'cloud_download';
+          icon.classList.remove('animate-spin');
+        }
+        if (label) label.textContent = 'Tarik Spreadsheet';
+      }
+    });
+  }
+
+  if (btnConfirmPull) {
+    btnConfirmPull.addEventListener('click', () => {
+      if (!pendingImportItems || pendingImportItems.length === 0) {
+        closeModal();
+        return;
+      }
+
+      try {
+        btnConfirmPull.disabled = true;
+        btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Menyimpan...';
+
+        const res = commitImportedSupplies(store, pendingImportItems);
+        closeModal();
+
+        showToast(`Berhasil menambahkan ${res.importedItems} sepatu baru dari Spreadsheet!`, 'success');
+
+        updateKpi();
+        renderItems();
+      } catch (err) {
+        alert(`Gagal menyimpan data import:\n\n${err.message}`);
+        showToast('Gagal menyimpan barang masuk.', 'error');
+      } finally {
+        btnConfirmPull.disabled = false;
+        btnConfirmPull.innerHTML = '<span class="material-symbols-outlined text-sm">check_circle</span> <span>Konfirmasi & Simpan ke Stok</span>';
+      }
     });
   }
 
