@@ -69,17 +69,25 @@ export function renderTransaksiListPage(store, filterType = 'all', isAdmin = tru
           <span>Mode Lihat Saja — Atasan tidak bisa menambah transaksi</span>
         </div>`}
 
-        <!-- Search Bar -->
-        <div class="relative w-full">
+        <!-- Search Bar with Camera Barcode Scanner -->
+        <div class="relative w-full flex items-center">
           <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-on-surface-variant">
             <span class="material-symbols-outlined text-[20px]">search</span>
           </div>
           <input 
             type="text" 
             id="trx-search-input"
-            placeholder="Cari transaksi, nota, produk..." 
-            class="glass-input w-full pl-10 pr-4 py-2.5 text-on-surface font-body-md text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-on-tertiary-container transition-all"
+            placeholder="Cari transaksi, nota, produk, barcode..." 
+            class="glass-input w-full pl-10 pr-11 py-2.5 text-on-surface font-body-md text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-on-tertiary-container transition-all"
           />
+          <button
+            type="button"
+            id="btn-scan-trx-search"
+            class="absolute right-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-primary hover:text-emerald-300 hover:bg-white/10 active:scale-95 transition-all"
+            title="Scan Barcode Sepatu / Nota dengan Kamera"
+          >
+            <span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+          </button>
         </div>
 
         <!-- Segmented Type Tabs (Semua / Masuk / Keluar / Perlu Cek) -->
@@ -407,6 +415,7 @@ export function initTransaksiListPage(router, store, initialFilter = 'all', isAd
   let modalScannerZoom = 1;
   let modalUseFrontCamera = false;
   let isProcessingModalScan = false;
+  let currentScannerTargetMode = 'modal-item';
 
   function setModalScannerStatus(message, type = 'info') {
     const statusEl = document.getElementById('modal-scanner-status');
@@ -484,11 +493,12 @@ export function initTransaksiListPage(router, store, initialFilter = 'all', isAd
   function switchModalCamera() {
     modalUseFrontCamera = !modalUseFrontCamera;
     closeModalScanner();
-    setTimeout(() => openModalScanner(), 100);
+    setTimeout(() => openModalScanner(currentScannerTargetMode), 100);
   }
 
-  function openModalScanner() {
+  function openModalScanner(targetMode = 'modal-item') {
     if (!scannerModal) return;
+    currentScannerTargetMode = targetMode;
     scannerModal.classList.remove('hidden');
     isProcessingModalScan = false;
     setModalScannerStatus('Geser barcode ke dalam kotak sampai terkunci', 'info');
@@ -524,20 +534,50 @@ export function initTransaksiListPage(router, store, initialFilter = 'all', isAd
       
       setModalScannerStatus(`Barcode terdeteksi: ${decodedText}`, 'success');
       
-      // Set barcode ke input field di modal add-item
-      const barcodeInput = document.getElementById('add-item-barcode');
-      if (barcodeInput) {
-        barcodeInput.value = decodedText;
-        // Trigger input event untuk validasi
-        const event = new Event('input', { bubbles: true });
-        barcodeInput.dispatchEvent(event);
+      if (currentScannerTargetMode === 'search') {
+        const searchInput = document.getElementById('trx-search-input');
+        if (searchInput) {
+          searchInput.value = decodedText;
+          searchQuery = decodedText.toLowerCase().trim();
+
+          // Auto-expand breakdown transaksi yang memuat barcode / nama sepatu / nota ini
+          const allTrx = store.getTransactions();
+          allTrx.forEach((t) => {
+            if (
+              (t.nota && t.nota.toLowerCase().includes(searchQuery)) ||
+              (t.title && t.title.toLowerCase().includes(searchQuery)) ||
+              (t.items && t.items.some((it) => 
+                (it.barcode && it.barcode.toLowerCase().includes(searchQuery)) || 
+                (it.name && it.name.toLowerCase().includes(searchQuery))
+              ))
+            ) {
+              expandedTrx.add(t.id);
+            }
+          });
+
+          renderItems();
+        }
+
+        setTimeout(() => {
+          closeModalScanner();
+          showToast(`Mencari: ${decodedText}`, 'success');
+        }, 400);
+      } else {
+        // Set barcode ke input field di modal add-item
+        const barcodeInput = document.getElementById('add-item-barcode');
+        if (barcodeInput) {
+          barcodeInput.value = decodedText;
+          // Trigger input event untuk validasi
+          const event = new Event('input', { bubbles: true });
+          barcodeInput.dispatchEvent(event);
+        }
+        
+        // Close scanner setelah 500ms
+        setTimeout(() => {
+          closeModalScanner();
+          showToast('Barcode berhasil dipindai', 'success');
+        }, 500);
       }
-      
-      // Close scanner setelah 500ms
-      setTimeout(() => {
-        closeModalScanner();
-        showToast('Barcode berhasil dipindai', 'success');
-      }, 500);
     };
 
     const onError = () => {
@@ -643,7 +683,11 @@ export function initTransaksiListPage(router, store, initialFilter = 'all', isAd
   const btnModalScannerSwitch = document.getElementById('btn-modal-scanner-switch-cam');
   const btnModalScannerRetry = document.getElementById('btn-modal-scanner-retry');
 
-  if (btnModalScanBarcode) btnModalScanBarcode.addEventListener('click', openModalScanner);
+  const btnScanTrxSearch = document.getElementById('btn-scan-trx-search');
+  if (btnScanTrxSearch) {
+    btnScanTrxSearch.addEventListener('click', () => openModalScanner('search'));
+  }
+  if (btnModalScanBarcode) btnModalScanBarcode.addEventListener('click', () => openModalScanner('modal-item'));
   if (btnCloseModalScanner) btnCloseModalScanner.addEventListener('click', closeModalScanner);
   if (btnCancelModalScanner) btnCancelModalScanner.addEventListener('click', closeModalScanner);
   if (btnModalScannerTorch) btnModalScannerTorch.addEventListener('click', () => applyModalTorch(!modalTorchOn));
@@ -657,9 +701,9 @@ export function initTransaksiListPage(router, store, initialFilter = 'all', isAd
         old.stop()
           .then(() => { try { old.clear(); } catch (_) {} })
           .catch(() => {})
-          .then(() => openModalScanner());
+          .then(() => openModalScanner(currentScannerTargetMode));
       } else {
-        openModalScanner();
+        openModalScanner(currentScannerTargetMode);
       }
     });
   }
@@ -1055,7 +1099,11 @@ export function initTransaksiListPage(router, store, initialFilter = 'all', isAd
           t.title.toLowerCase().includes(searchQuery) ||
           t.category.toLowerCase().includes(searchQuery) ||
           (t.nota && t.nota.toLowerCase().includes(searchQuery)) ||
-          (t.paymentMethod && t.paymentMethod.toLowerCase().includes(searchQuery))
+          (t.paymentMethod && t.paymentMethod.toLowerCase().includes(searchQuery)) ||
+          (t.items && t.items.some((it) => 
+            (it.name && it.name.toLowerCase().includes(searchQuery)) ||
+            (it.barcode && it.barcode.toLowerCase().includes(searchQuery))
+          ))
         );
       });
     }

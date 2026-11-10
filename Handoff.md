@@ -106,6 +106,17 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 
 ---
 
+### 8. Fitur Scanner Kamera Barcode pada Pencarian Buku Transaksi
+- **Kebutuhan:** Mempermudah pencarian riwayat transaksi kas (baik penjualan barang, nota, maupun pengeluaran) cukup dengan memindai barcode sepatu atau label nota fisik.
+- **Implementasi (src/pages/transaksi-list.js):**
+  1. Menambahkan tombol kamera `qr_code_scanner` di sisi kanan kolom pencarian (*Search Bar*) transaksi.
+  2. Memanfaatkan arsitektur modal scanner kamera yang sudah ada pada halaman transaksi secara dual-mode:
+     - Mode 'search': mengisi teks barcode ke input pencarian, memicu filter real-time, dan otomatis membuka rincian (*auto-expand breakdown*) transaksi yang bersangkutan.
+     - Mode 'modal-item': tetap mendukung pemindaian barcode saat menambah/mengedit rincian barang transaksi.
+  3. **Penyempurnaan Filter Pencarian:** Filter pencarian `renderItems` diperluas untuk mencocokkan barcode dan nama barang pada array `trx.items`, sehingga transaksi penjualan sepatu dapat langsung ditemukan seketika saat barcode sepatunya dipindai.
+
+---
+
 ## Konteks Sebelumnya (Update 5 November 2026)
 
 ### Fitur Status Belanja Pre-Paid & Laporan HPP Sepatu Aktual (Modal + Ongkir per Pcs)
