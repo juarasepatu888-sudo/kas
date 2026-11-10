@@ -550,3 +550,5 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 - `getSalesStatsByDays()` secara otomatis mengeksklusi transaksi investor & piutang dari perhitungan omset penjualan.
 - Mode Switcher desktop sudah dihapus — desktop selalu menggunakan mode layar lebar (`max-width: 680px`).
 - Jika memindahkan ke repo baru, cukup ubah `VITE_BASE_PATH` di GitHub Secrets dan pastikan `manifest.json` menggunakan relative path (`./`).
+
+- **Fix (2026-11-11)**: Memperbaiki kesalahan variabel effectiveItems pada fungsi etchNewSuppliesFromGoogleSheets (seharusnya ewItems) dan memastikan effectiveItems digunakan pada commitImportedSupplies saat menyatukan kontainer.
