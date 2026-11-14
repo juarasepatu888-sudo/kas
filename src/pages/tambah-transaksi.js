@@ -90,12 +90,65 @@ function renderSaleItemCard(item, index, totalItems) {
         <span class="material-symbols-outlined text-rose-600 text-sm leading-none shrink-0 mt-0.5">warning</span>
         <div class="sale-item-warning-text leading-snug flex-1"></div>
       </div>
-      <div class="flex items-center gap-1.5">
-        <div class="relative flex-1">
-          <span class="absolute left-2.5 top-2 text-[11px] text-on-surface-variant font-bold">Rp</span>
- <input type="text" class="sale-item-price w-full pl-7 pr-2.5 py-1.5 rounded-lg glass-input text-on-surface font-bold text-xs font-tabular focus:outline-none focus:ring-2 focus:ring-on-tertiary-container" placeholder="Harga jual..." value="${priceVal}" inputmode="numeric" data-sale-item-id="${item.id}" />
+      <!-- Qty Stepper & Harga Jual Satuan (Rapih, Seimbang & Presisi) -->
+      <div class="grid grid-cols-2 gap-2 mt-1">
+        <!-- Kotak Jumlah Pasang (Qty) -->
+        <div class="flex flex-col justify-between glass-panel p-2 rounded-xl border border-white/10">
+          <div class="flex items-center justify-between min-h-[15px]">
+            <span class="font-label-sm text-[10px] text-on-surface font-semibold truncate">Jumlah Pasang</span>
+            <span class="sale-stock-tag text-[9px] font-bold text-emerald-400 shrink-0" data-sale-item-id="${item.id}"></span>
+          </div>
+
+          <div class="flex items-center rounded-lg glass-input overflow-hidden h-8 mt-1 border border-white/20">
+            <button 
+              type="button" 
+              class="btn-sale-qty-minus w-8 h-full flex items-center justify-center text-on-surface hover:text-primary hover:bg-white/10 active:scale-90 transition-all font-bold text-sm select-none shrink-0" 
+              data-sale-item-id="${item.id}"
+              title="Kurangi 1 Pasang"
+            >−</button>
+            <input 
+              type="number" 
+              min="1" 
+              step="1"
+              class="sale-item-qty w-full min-w-0 flex-1 h-full text-center font-bold text-xs font-tabular text-primary bg-transparent border-0 focus:outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+              value="${item.qty || 1}" 
+              data-sale-item-id="${item.id}"
+            />
+            <button 
+              type="button" 
+              class="btn-sale-qty-plus w-8 h-full flex items-center justify-center text-on-surface hover:text-primary hover:bg-white/10 active:scale-90 transition-all font-bold text-sm select-none shrink-0" 
+              data-sale-item-id="${item.id}"
+              title="Tambah 1 Pasang"
+            >+</button>
+          </div>
+
+          <div class="sale-stock-helper text-[9px] text-on-surface-variant mt-1 leading-tight truncate min-h-[14px]" data-sale-item-id="${item.id}">
+            <span class="text-on-surface-variant/70">Min 1 psg</span>
+          </div>
         </div>
-        <span class="text-[10px] text-on-surface-variant font-semibold shrink-0">Harga Jual</span>
+
+        <!-- Kotak Harga Jual / Pasang -->
+        <div class="flex flex-col justify-between glass-panel p-2 rounded-xl border border-white/10">
+          <div class="flex items-center justify-between min-h-[15px]">
+            <label class="font-label-sm text-[10px] text-on-surface-variant font-semibold truncate">Harga Jual / Psg</label>
+          </div>
+
+          <div class="relative flex items-center rounded-lg glass-input overflow-hidden h-8 mt-1 border border-white/20">
+            <span class="absolute left-2 text-[11px] text-on-surface-variant font-bold pointer-events-none">Rp</span>
+            <input 
+              type="text" 
+              class="sale-item-price w-full h-full pl-7 pr-2 bg-transparent border-0 text-on-surface font-bold text-xs font-tabular focus:outline-none p-0" 
+              placeholder="Harga jual..." 
+              value="${priceVal}" 
+              inputmode="numeric" 
+              data-sale-item-id="${item.id}" 
+            />
+          </div>
+
+          <div class="sale-subtotal-helper text-[9px] text-on-surface-variant mt-1 text-right font-medium truncate min-h-[14px]" data-sale-item-id="${item.id}">
+            Subtotal: <strong class="text-primary font-tabular">Rp ${formatRupiah((item.qty || 1) * (item.price || 0), '')}</strong>
+          </div>
+        </div>
       </div>
     </div>
   `;
