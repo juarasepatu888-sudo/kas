@@ -618,20 +618,8 @@ export function initTambahTransaksiPage(router, store, params = {}) {
     if (!barcode || !barcode.trim() || barcode.trim().length < 2) return null;
     const clean = barcode.trim().toUpperCase();
 
-    // 1. Cek duplikat sesama item di formulir penjualan saat ini
-    const siblingIdx = saleItems.findIndex((it) => it.id !== currentItemId && it.barcode && it.barcode.trim().toUpperCase() === clean);
-    if (siblingIdx !== -1) {
-      const siblingNum = siblingIdx + 1;
-      const sib = saleItems[siblingIdx];
-      return {
-        type: 'sibling',
-        conflictBarcode: clean,
-        message: `Peringatan: Barcode "${clean}" sudah dimasukkan pada Sepatu #${siblingNum}${sib.name ? ` (${sib.name})` : ''} di daftar ini! Jangan memasukkan barcode ganda.`
-      };
-    }
-
-    // 2. Cek apakah barcode ini ada di stok barang yang tersedia
-    const stockReport = store.getRealtimeStockReport();
+    // 1. Cek ketersediaan di stok barang real-time
+    const stockReport = store.getRealtimeStockReport ? store.getRealtimeStockReport({ excludeTrxId: isEditMode ? editId : null }) : { unsoldItems: [] };
     const availableItems = stockReport.unsoldItems || [];
     const stockItem = availableItems.find((item) => {
       if (item.hasRealBarcode && item.barcode) {
@@ -640,24 +628,33 @@ export function initTambahTransaksiPage(router, store, params = {}) {
       return false;
     });
     
-    if (!stockItem) {
+    if (!stockItem || (stockItem.sisaStock !== undefined && stockItem.sisaStock <= 0)) {
+      const soldTrx = store.findSoldTransactionByBarcode(clean, isEditMode ? editId : null);
+      if (soldTrx) {
+        const buyerInfo = soldTrx.buyer ? `ke ${soldTrx.buyer}` : '';
+        const notaInfo = soldTrx.nota || 'transaksi lain';
+        const timeInfo = soldTrx.time ? `(${soldTrx.time})` : '';
+        return {
+          type: 'already_sold',
+          conflictBarcode: clean,
+          message: `Peringatan: Sepatu dengan barcode "${clean}" SUDAH HABIS TERJUAL pada ${notaInfo} ${buyerInfo} ${timeInfo}! Stok tidak mencukupi.`
+        };
+      }
       return {
         type: 'out_of_stock',
         conflictBarcode: clean,
-        message: `❌ Barang dengan barcode "${clean}" SUDAH LAKU atau tidak ada di stok! Tidak bisa dimasukkan.`
+        message: `❌ Barang dengan barcode "${clean}" SUDAH LAKU / STOK HABIS (0 pasang)! Tidak bisa dimasukkan.`
       };
     }
 
-    // 3. Cek apakah barcode ini sudah pernah terjual di transaksi lain sebelumnya
-    const soldTrx = store.findSoldTransactionByBarcode(clean, isEditMode ? editId : null);
-    if (soldTrx) {
-      const buyerInfo = soldTrx.buyer ? `ke ${soldTrx.buyer}` : '';
-      const notaInfo = soldTrx.nota || 'transaksi lain';
-      const timeInfo = soldTrx.time ? `(${soldTrx.time})` : '';
+    // 2. Cek apakah jumlah yang dimasukkan di form penjualan melebihi sisa stok yang ada
+    const countInForm = saleItems.filter((it) => it.barcode && it.barcode.trim().toUpperCase() === clean).length;
+    const maxStock = stockItem.sisaStock !== undefined ? stockItem.sisaStock : 1;
+    if (countInForm > maxStock) {
       return {
-        type: 'already_sold',
+        type: 'over_stock',
         conflictBarcode: clean,
-        message: `Peringatan: Sepatu dengan barcode "${clean}" SUDAH PERNAH TERJUAL sebelumnya pada ${notaInfo} ${buyerInfo} ${timeInfo}! Sepatu yang sudah laku tidak boleh diinput lagi.`
+        message: `Stok barang "${stockItem.name || clean}" hanya tersedia ${maxStock} pasang! Di formulir penjualan sudah diinput ${countInForm} pasang.`
       };
     }
 
@@ -762,16 +759,19 @@ export function initTambahTransaksiPage(router, store, params = {}) {
     const popup = cardEl.querySelector('.stock-dropdown-popup');
     if (!popup) return;
 
-    // Filter keluar barcode yang sedang dipilih pada sepatu lain di form ini
-    const otherSelectedBarcodes = new Set(
-      saleItems
-        .filter((it) => it.id !== itemId && it.barcode)
-        .map((it) => it.barcode.trim().toUpperCase())
-    );
+    // Hitung berapa kali barcode sudah dipilih di baris lain form penjualan ini
+    const barcodeUsageInForm = new Map();
+    saleItems.filter((it) => it.id !== itemId && it.barcode).forEach((it) => {
+      const bc = it.barcode.trim().toUpperCase();
+      barcodeUsageInForm.set(bc, (barcodeUsageInForm.get(bc) || 0) + 1);
+    });
 
-    // Ambil daftar sepatu yang tersedia di stok & belum terjual
+    // Ambil daftar sepatu yang sisa stoknya masih ada
     const available = store.getAvailableProducts(isEditMode ? editId : null).filter((p) => {
-      return !otherSelectedBarcodes.has(p.barcode.toString().trim().toUpperCase());
+      const bc = (p.barcode || '').toString().trim().toUpperCase();
+      const used = barcodeUsageInForm.get(bc) || 0;
+      const sisa = p.sisaStock !== undefined ? p.sisaStock : 1;
+      return sisa > used;
     });
 
     const query = (searchQuery || '').trim().toLowerCase();

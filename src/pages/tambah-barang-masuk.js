@@ -24,7 +24,7 @@ function createNewItem(defaultValues = {}) {
     kondisi: defaultValues.kondisi || 'Bagus',
     catatanMinus: defaultValues.catatanMinus || '',
     photo: defaultValues.photo || null,
-    qty: 1, // Fixed default 1 pcs
+    qty: Math.max(1, parseInt(defaultValues.qty) || 1),
     buyPrice: Number(defaultValues.buyPrice) || 185000
   };
 }
@@ -201,26 +201,54 @@ function renderItemCardHtml(item, index, totalItems) {
         </div>
       </div>
 
-      <!-- 5. Qty (Locked 1 Pcs) & Harga Beli -->
+      <!-- 5. Qty Bebas Diisi & Harga Beli (Berdasarkan Stok Tersedia) -->
       <div class="grid grid-cols-2 gap-2.5">
- <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl">
-          <span class="font-label-sm text-[11px] text-on-surface font-semibold">Jumlah Pasang (Qty)</span>
-          <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-chip-btn text-on-surface font-bold text-xs mt-1 select-none">
-            <span class="material-symbols-outlined text-[14px] text-on-surface-variant">lock</span>
-            <span class="font-tabular font-bold text-primary">1 Pcs</span>
+        <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl">
+          <div class="flex items-center justify-between">
+            <span class="font-label-sm text-[11px] text-on-surface font-semibold">Jumlah Pasang (Qty)</span>
+            <span class="stock-info-tag text-[10px] font-bold" data-item-id="${item.id}"></span>
+          </div>
+          <div class="flex items-center gap-1.5 mt-1">
+            <button 
+              type="button" 
+              class="btn-qty-minus w-8 h-8 rounded-lg glass-chip-btn flex items-center justify-center font-bold text-base text-on-surface hover:text-primary active:scale-95 transition-all select-none" 
+              data-item-id="${item.id}"
+              title="Kurangi 1 Pasang"
+            >−</button>
+            <input 
+              type="number" 
+              min="1" 
+              step="1"
+              class="input-item-qty flex-1 py-1 px-1 text-center rounded-lg glass-input text-on-surface font-bold text-sm font-tabular focus:outline-none focus:ring-2 focus:ring-on-tertiary-container" 
+              value="${item.qty || 1}" 
+              data-item-id="${item.id}"
+              placeholder="Qty"
+            />
+            <button 
+              type="button" 
+              class="btn-qty-plus w-8 h-8 rounded-lg glass-chip-btn flex items-center justify-center font-bold text-base text-on-surface hover:text-primary active:scale-95 transition-all select-none" 
+              data-item-id="${item.id}"
+              title="Tambah 1 Pasang"
+            >+</button>
+          </div>
+          <div class="stock-status-helper text-[10px] text-on-surface-variant mt-1 leading-tight flex items-center gap-1" data-item-id="${item.id}">
+            <span class="text-on-surface-variant/70">Bebas diisi sesuai stok</span>
           </div>
         </div>
 
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl">
           <label class="font-label-sm text-[11px] text-on-surface-variant font-semibold">Harga Beli / Pasang</label>
-          <div class="relative">
-            <span class="absolute left-2.5 top-2.5 text-xs text-on-surface-variant font-bold">Rp</span>
+          <div class="relative mt-1">
+            <span class="absolute left-2.5 top-2 text-xs text-on-surface-variant font-bold">Rp</span>
             <input 
               type="text" 
- class="input-harga-beli w-full pl-7 pr-2.5 py-2 rounded-xl glass-input text-on-surface font-bold text-sm font-tabular focus:outline-none focus:ring-2 focus:ring-on-tertiary-container"
+              class="input-harga-beli w-full pl-7 pr-2.5 py-1.5 rounded-lg glass-input text-on-surface font-bold text-sm font-tabular focus:outline-none focus:ring-2 focus:ring-on-tertiary-container"
               value="${priceVal}"
               data-item-id="${item.id}"
             />
+          </div>
+          <div class="subtotal-item-helper text-[10px] text-on-surface-variant mt-1 text-right font-medium" data-item-id="${item.id}">
+            Subtotal: <strong class="text-primary font-tabular">Rp ${formatRupiah((item.qty || 1) * (item.buyPrice || 185000), '')}</strong>
           </div>
         </div>
       </div>
@@ -770,67 +798,48 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     }
   }
 
-  // Helper Pemeriksaan Duplikasi Barcode
+  // Helper Informasi Stok & Duplikasi Barcode
+  function getStockInfoForBarcode(barcode) {
+    if (!barcode || !barcode.trim()) return null;
+    const clean = barcode.trim().toUpperCase();
+    const report = store.getRealtimeStockReport ? store.getRealtimeStockReport() : { items: [] };
+    const stockItem = (report.items || []).find((it) => it.barcode && it.barcode.toString().trim().toUpperCase() === clean);
+    const product = store.getProductByBarcode(clean) || (stockItem ? { name: stockItem.name, buyPrice: stockItem.buyPrice, photo: stockItem.photo } : null);
+    return {
+      stockItem,
+      product,
+      sisaStock: stockItem ? (stockItem.sisaStock || 0) : 0,
+      totalMasuk: stockItem ? (stockItem.totalMasuk || 0) : 0,
+      totalTerjual: stockItem ? (stockItem.totalTerjual || 0) : 0
+    };
+  }
+
   function findBarcodeConflict(barcode, currentItemId) {
     if (!barcode || !barcode.trim() || barcode.trim().length < 2) return null;
     const clean = barcode.trim().toUpperCase();
 
-    // 1. Cek duplikat di sesama item di form belanja ini
+    // 1. Cek duplikat di sesama baris di form belanja yang sama
     const sibling = items.find((it) => it.id !== currentItemId && it.barcode && it.barcode.trim().toUpperCase() === clean);
     if (sibling) {
       return {
         type: 'sibling',
         conflictBarcode: clean,
-        message: `Kode barcode "${clean}" sedang digunakan pada sepatu lain di form ini (${sibling.name ? `"${sibling.name}"` : 'sepatu lain'}). Setiap pasang sepatu wajib memiliki kode barcode unik!`
+        message: `Barcode "${clean}" sudah ada pada sepatu lain di form ini (${sibling.name || 'sepatu lain'}). Silakan atur Jumlah Pasang (Qty) di baris tersebut.`
       };
     }
 
-    // 2. Cek apakah kode barcode sudah terdaftar di katalog produk
-    const product = store.getProductByBarcode(clean) || store.getProductByBarcode(barcode.trim());
-    if (product) {
-      let isSelf = false;
-      if (isEdit && targetSupply && targetSupply.items) {
-        const currentItem = items.find((it) => it.id === currentItemId);
-        const originalBc = (currentItem && currentItem.originalBarcode) 
-          ? currentItem.originalBarcode.trim().toUpperCase() 
-          : '';
-
-        // Dianggap milik item sendiri jika:
-        // 1. Barcode sama persis dengan barcode asli saat form dibuka (user hanya edit harga/nama/dsb), ATAU
-        // 2. Barcode ada di data item targetSupply yang sedang diedit ini
-        if (originalBc && originalBc === clean) {
-          isSelf = true;
-        } else {
-          isSelf = targetSupply.items.some((it) => {
-            const matchesId = it.id && it.id === currentItemId;
-            const matchesBc = it.barcode && it.barcode.trim().toUpperCase() === clean;
-            return matchesId && matchesBc;
-          });
-        }
-      }
-      if (!isSelf) {
-        return {
-          type: 'database',
-          conflictBarcode: clean,
-          message: `Peringatan: Kode barcode "${clean}" sudah pernah diinput sebelumnya untuk barang "${product.name || 'Produk'}"${product.supplier ? ` (${product.supplier})` : ''}. Harap gunakan kode barcode stiker lain agar tidak dobel!`
-        };
-      }
-    }
-
-    // 3. Cek apakah kode barcode sudah pernah ada di riwayat belanja (supplies)
-    const supplies = store.getSupplies() || [];
-    for (const sup of supplies) {
-      if (isEdit && targetSupply && sup.id === targetSupply.id) continue;
-      if (sup.items && Array.isArray(sup.items)) {
-        const found = sup.items.find((it) => it.barcode && it.barcode.trim().toUpperCase() === clean);
-        if (found) {
-          return {
-            type: 'database',
-            conflictBarcode: clean,
-            message: `Peringatan: Kode barcode "${clean}" sudah pernah diinput pada nota belanja ${sup.invoiceNo || ''} (${found.name || 'Sepatu'}). Harap gunakan kode barcode unik!`
-          };
-        }
-      }
+    // 2. Cek apakah barcode sudah ada di katalog produk / database stok (Restock produk yang sudah ada)
+    const stockInfo = getStockInfoForBarcode(clean);
+    if (stockInfo && (stockInfo.product || stockInfo.stockItem)) {
+      const prodName = (stockInfo.product && stockInfo.product.name) || (stockInfo.stockItem && stockInfo.stockItem.name) || 'Produk Terdaftar';
+      return {
+        type: 'restock_info',
+        conflictBarcode: clean,
+        isRestock: true,
+        product: stockInfo.product,
+        stockInfo: stockInfo,
+        message: `Produk terdaftar: "${prodName}". Sisa stok di toko: ${stockInfo.sisaStock} pasang. Qty belanja ini akan menambah stok yang ada.`
+      };
     }
 
     return null;
@@ -857,36 +866,123 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
     const barcodeWarning = cardEl.querySelector('.barcode-duplicate-warning');
     const barcodeWarningText = barcodeWarning ? barcodeWarning.querySelector('.barcode-warning-text') : null;
 
+    function updateStockInfoDisplay() {
+      const tagEl = cardEl.querySelector('.stock-info-tag');
+      const helperEl = cardEl.querySelector('.stock-status-helper');
+      const subtotalEl = cardEl.querySelector('.subtotal-item-helper');
+
+      const qty = Math.max(1, parseInt(item.qty) || 1);
+      const buyPrice = Number(item.buyPrice) || 0;
+      if (subtotalEl) {
+        subtotalEl.innerHTML = `Subtotal: <strong class="text-primary font-tabular">Rp ${formatRupiah(qty * buyPrice, '')}</strong>`;
+      }
+
+      const cleanBc = (item.barcode || '').trim().toUpperCase();
+      if (!cleanBc) {
+        if (tagEl) tagEl.textContent = '';
+        if (helperEl) helperEl.innerHTML = `<span class="text-on-surface-variant/70">Bebas diisi sesuai stok belanja</span>`;
+        return;
+      }
+
+      const info = getStockInfoForBarcode(cleanBc);
+      if (info && (info.product || info.stockItem)) {
+        const sisa = info.sisaStock;
+        if (tagEl) {
+          tagEl.innerHTML = `<span class="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">Stok: ${sisa} psg</span>`;
+        }
+        if (helperEl) {
+          helperEl.innerHTML = `<span class="text-emerald-400 font-medium">✓ Sisa di toko: <b>${sisa} psg</b> (+<b>${qty} psg</b> baru = <b>${sisa + qty} psg</b>)</span>`;
+        }
+      } else {
+        if (tagEl) {
+          tagEl.innerHTML = `<span class="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-bold text-[10px]">Baru</span>`;
+        }
+        if (helperEl) {
+          helperEl.innerHTML = `<span class="text-primary font-medium">★ Barang baru masuk: <b>${qty} pasang</b></span>`;
+        }
+      }
+    }
+
     function checkBarcodeDuplicate(code) {
       if (!code || code.trim().length < 2) {
         if (barcodeWarning) barcodeWarning.classList.add('hidden');
         if (inputBarcode) {
-          inputBarcode.classList.remove('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-2', 'ring-rose-400');
+          inputBarcode.classList.remove('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-2', 'ring-rose-400', 'border-emerald-500', 'ring-emerald-400');
           inputBarcode.classList.add('border-surface-container-high');
         }
+        updateStockInfoDisplay();
         return true;
       }
 
       const conflict = findBarcodeConflict(code, itemId);
 
       if (conflict) {
-        if (barcodeWarningText) {
-          barcodeWarningText.textContent = conflict.message;
-        } else if (barcodeWarning) {
-          barcodeWarning.textContent = conflict.message;
+        if (conflict.type === 'restock_info') {
+          // Info Restock Produk yang sudah ada
+          if (barcodeWarningText) {
+            barcodeWarningText.innerHTML = `<span class="text-emerald-700 font-semibold flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">inventory_2</span><span>${conflict.message}</span></span>`;
+          } else if (barcodeWarning) {
+            barcodeWarning.innerHTML = `<span class="text-emerald-700 font-semibold flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">inventory_2</span><span>${conflict.message}</span></span>`;
+          }
+          if (barcodeWarning) {
+            barcodeWarning.classList.remove('hidden', 'text-rose-700', 'bg-rose-50', 'border-rose-300');
+            barcodeWarning.classList.add('text-emerald-800', 'bg-emerald-50/80', 'border-emerald-300');
+          }
+          if (inputBarcode) {
+            inputBarcode.classList.remove('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-rose-400');
+            inputBarcode.classList.add('border-emerald-500', 'ring-1', 'ring-emerald-400');
+          }
+
+          // Auto-fill nama, foto & harga bila belum diisi
+          if (conflict.product) {
+            if (!item.name && conflict.product.name) {
+              item.name = conflict.product.name;
+              const nameInput = cardEl.querySelector('.input-item-name');
+              if (nameInput) nameInput.value = item.name;
+            }
+            if ((!item.buyPrice || item.buyPrice === 185000) && conflict.product.buyPrice) {
+              item.buyPrice = Number(conflict.product.buyPrice);
+              const priceInput = cardEl.querySelector('.input-harga-beli');
+              if (priceInput) priceInput.value = formatRupiah(item.buyPrice, '');
+            }
+            if (!item.photo && conflict.product.photo) {
+              item.photo = conflict.product.photo;
+              const previewImg = cardEl.querySelector('.photo-preview-img');
+              const previewBox = cardEl.querySelector('.photo-preview-box');
+              const placeholderBox = cardEl.querySelector('.photo-placeholder-box');
+              if (previewImg) previewImg.src = item.photo;
+              if (placeholderBox) placeholderBox.classList.add('hidden');
+              if (previewBox) previewBox.classList.remove('hidden');
+            }
+          }
+
+          updateStockInfoDisplay();
+          return true;
+        } else {
+          // Barcode sama di baris lain form ini (sibling duplicate)
+          if (barcodeWarningText) {
+            barcodeWarningText.textContent = conflict.message;
+          } else if (barcodeWarning) {
+            barcodeWarning.textContent = conflict.message;
+          }
+          if (barcodeWarning) {
+            barcodeWarning.classList.remove('hidden', 'text-emerald-800', 'bg-emerald-50/80', 'border-emerald-300');
+            barcodeWarning.classList.add('text-rose-700', 'bg-rose-50', 'border-rose-300');
+          }
+          if (inputBarcode) {
+            inputBarcode.classList.remove('border-emerald-500', 'ring-emerald-400');
+            inputBarcode.classList.add('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-2', 'ring-rose-400');
+          }
+          updateStockInfoDisplay();
+          return false;
         }
-        if (barcodeWarning) barcodeWarning.classList.remove('hidden');
-        if (inputBarcode) {
-          inputBarcode.classList.add('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-2', 'ring-rose-400');
-          inputBarcode.classList.remove('border-surface-container-high');
-        }
-        return false;
       } else {
         if (barcodeWarning) barcodeWarning.classList.add('hidden');
         if (inputBarcode) {
-          inputBarcode.classList.remove('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-2', 'ring-rose-400');
+          inputBarcode.classList.remove('border-rose-500', 'bg-rose-50/50', 'text-rose-900', 'ring-2', 'ring-rose-400', 'border-emerald-500', 'ring-emerald-400');
           inputBarcode.classList.add('border-surface-container-high');
         }
+        updateStockInfoDisplay();
         return true;
       }
     }
@@ -1049,6 +1145,48 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
       });
     });
 
+    // Qty Controls (Minus, Plus, & Input Bebas Tanpa Batas)
+    const inputQty = cardEl.querySelector('.input-item-qty');
+    const btnMinus = cardEl.querySelector('.btn-qty-minus');
+    const btnPlus = cardEl.querySelector('.btn-qty-plus');
+
+    function setItemQty(val) {
+      const q = Math.max(1, parseInt(val) || 1);
+      item.qty = q;
+      if (inputQty && parseInt(inputQty.value) !== q) {
+        inputQty.value = q;
+      }
+      updateStockInfoDisplay();
+      calculateTotals();
+    }
+
+    if (btnMinus) {
+      btnMinus.addEventListener('click', () => {
+        setItemQty((Number(item.qty) || 1) - 1);
+      });
+    }
+
+    if (btnPlus) {
+      btnPlus.addEventListener('click', () => {
+        setItemQty((Number(item.qty) || 1) + 1);
+      });
+    }
+
+    if (inputQty) {
+      inputQty.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        if (!isNaN(val) && val >= 1) {
+          item.qty = val;
+          updateStockInfoDisplay();
+          calculateTotals();
+        }
+      });
+      inputQty.addEventListener('blur', (e) => {
+        const val = parseInt(e.target.value);
+        setItemQty(isNaN(val) || val < 1 ? 1 : val);
+      });
+    }
+
     // Input Harga Beli
     const inputBeli = cardEl.querySelector('.input-harga-beli');
     if (inputBeli) {
@@ -1056,9 +1194,13 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
         const raw = parseRupiah(inputBeli.value);
         item.buyPrice = raw;
         inputBeli.value = formatRupiah(raw, '');
+        updateStockInfoDisplay();
         calculateTotals();
       });
     }
+
+    // Render inisial stock info & subtotal
+    updateStockInfoDisplay();
   }
 
   function renderAllCards() {
@@ -1485,12 +1627,12 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
       }
     }
 
-    // 2. Validasi Anti-Barcode Dobel (Cek duplikasi barcode di sistem & form)
+    // 2. Validasi Anti-Barcode Dobel (Cek duplikasi barcode di formulir)
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (it.barcode && it.barcode.trim()) {
         const conflict = findBarcodeConflict(it.barcode, it.id);
-        if (conflict) {
+        if (conflict && conflict.type !== 'restock_info') {
           showToast(`Peringatan: Barcode "${conflict.conflictBarcode || it.barcode}" dobel! ${conflict.message}`, 'error');
           const cardEl = container.querySelector(`[data-item-id="${it.id}"]`);
           if (cardEl) {
@@ -1534,7 +1676,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
           kondisi: itemToAdd.kondisi || 'Bagus',
           catatanMinus: itemToAdd.catatanMinus || '',
           photo: itemToAdd.photo || null,
-          qty: 1,
+          qty: Math.max(1, parseInt(itemToAdd.qty) || 1),
           buyPrice: Number(itemToAdd.buyPrice) || 185000
         }, appendStatus);
       });
@@ -1557,7 +1699,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
       kondisi: it.kondisi || 'Bagus',
       catatanMinus: it.catatanMinus || '',
       photo: it.photo || null,
-      qty: 1,
+      qty: Math.max(1, parseInt(it.qty) || 1),
       buyPrice: Number(it.buyPrice) || 185000
     }));
 

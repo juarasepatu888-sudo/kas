@@ -552,3 +552,28 @@ Ketika menambah barang ke-2 dan seterusnya pada nota belanja (baik via form mult
 - Jika memindahkan ke repo baru, cukup ubah `VITE_BASE_PATH` di GitHub Secrets dan pastikan `manifest.json` menggunakan relative path (`./`).
 
 - **Fix (2026-11-11)**: Memperbaiki kesalahan variabel effectiveItems pada fungsi etchNewSuppliesFromGoogleSheets (seharusnya ewItems) dan memastikan effectiveItems digunakan pada commitImportedSupplies saat menyatukan kontainer.
+
+## 10. Fitur Jumlah Pasang (Qty) Bebas Tanpa Batas Berdasarkan Sisa Stok (14 November 2026)
+
+### Latar Belakang & Kebutuhan
+Sebelumnya, pada formulir Belanja / Tambah Barang Masuk (`src/pages/tambah-barang-masuk.js`), nilai **Jumlah Pasang (Qty)** dikunci permanen pada badge `🔒 1 Pcs` (asumsi awal 1 pasang per barcode). Aturan ini membatasi ketika pemilik toko kulakan beberapa pasang untuk model/barcode yang sama atau ingin melakukan restock barang yang sudah ada.
+
+### Perubahan & Aturan Baru yang Diterapkan:
+1. **Qty Bebas Diisi Tanpa Batas di Halaman Belanja:**
+   - Badge `🔒 1 Pcs` diganti dengan kontrol Qty interaktif: tombol minus `−`, input angka langsung, dan tombol plus `+`.
+   - Admin dapat mengisi jumlah pasang berapa pun (1, 2, 5, 10, 50, dst) tanpa batas atas (minimal 1 pasang).
+   - Nilai subtotal (`Qty × Harga Beli`) dan total ringkasan nota langsung terhitung otomatis secara real-time.
+
+2. **Deteksi Sisa Stok Barang Real-Time di Halaman Belanja:**
+   - Saat barcode di-scan atau diinput, sistem langsung memeriksa status barang di database stok toko (`store.getRealtimeStockReport()`).
+   - Jika barang sudah pernah ada di toko, muncul info stok: `✓ Sisa di toko: X psg (+Y psg baru = Z psg)` dan badge status `Stok: X psg`.
+   - Jika barang baru pertama kali masuk: muncul keterangan `★ Barang baru masuk: Y pasang`.
+   - Mengubah validasi barcode di halaman Belanja agar barcode terdaftar tidak lagi diblokir sebagai error duplikat, melainkan dianggap sebagai **Restock Barang** dan otomatis mengisi nama produk, foto, serta harga beli sebelumnya.
+
+3. **Penyimpanan Qty Sebenarnya:**
+   - Mode Tambah Sepatu Baru, Tambah ke Nota yang Ada (`append`), maupun Edit Nota kini menyimpan nilai `qty` sebenarnya dari input pengguna (bukan hardcoded `1`).
+   - `store.addItemToSupply`, `store.addSupply`, dan `store.updateSupply` mengakumulasikan total nominal dan pasang secara presisi.
+
+4. **Sinkronisasi Multi-Qty pada Penjualan (Halaman Transaksi):**
+   - Pada `src/pages/tambah-transaksi.js`, sistem kini mengizinkan penjualan lebih dari 1 pasang untuk barcode yang sama jika stoknya memang tersedia (`sisaStock >= jumlah di form penjualan`).
+   - Popup pencarian stok (`populateStockDropdown`) menghitung jumlah pemakaian barcode di form dan hanya menyaring keluar item jika seluruh sisa stoknya sudah terpilih.
