@@ -201,17 +201,19 @@ function renderItemCardHtml(item, index, totalItems) {
         </div>
       </div>
 
-      <!-- 5. Qty Bebas Diisi & Harga Beli (Berdasarkan Stok Tersedia) -->
+      <!-- 5. Qty Bebas Diisi & Harga Beli (Rapih, Seimbang & Presisi) -->
       <div class="grid grid-cols-2 gap-2.5">
-        <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl">
-          <div class="flex items-center justify-between">
-            <span class="font-label-sm text-[11px] text-on-surface font-semibold">Jumlah Pasang (Qty)</span>
-            <span class="stock-info-tag text-[10px] font-bold" data-item-id="${item.id}"></span>
+        <!-- Kotak Jumlah Pasang (Qty) -->
+        <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl border border-white/10">
+          <div class="flex items-center justify-between min-h-[16px]">
+            <span class="font-label-sm text-[11px] text-on-surface font-semibold truncate">Jumlah Pasang</span>
+            <span class="stock-info-tag text-[10px] font-bold shrink-0" data-item-id="${item.id}"></span>
           </div>
-          <div class="flex items-center gap-1.5 mt-1">
+
+          <div class="flex items-center rounded-xl glass-input overflow-hidden h-9 mt-1.5 border border-white/20">
             <button 
               type="button" 
-              class="btn-qty-minus w-8 h-8 rounded-lg glass-chip-btn flex items-center justify-center font-bold text-base text-on-surface hover:text-primary active:scale-95 transition-all select-none" 
+              class="btn-qty-minus w-9 h-full flex items-center justify-center text-on-surface hover:text-primary hover:bg-white/10 active:scale-90 transition-all font-bold text-base select-none shrink-0" 
               data-item-id="${item.id}"
               title="Kurangi 1 Pasang"
             >−</button>
@@ -219,35 +221,40 @@ function renderItemCardHtml(item, index, totalItems) {
               type="number" 
               min="1" 
               step="1"
-              class="input-item-qty flex-1 py-1 px-1 text-center rounded-lg glass-input text-on-surface font-bold text-sm font-tabular focus:outline-none focus:ring-2 focus:ring-on-tertiary-container" 
+              class="input-item-qty w-full min-w-0 flex-1 h-full text-center font-bold text-xs font-tabular text-primary bg-transparent border-0 focus:outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
               value="${item.qty || 1}" 
               data-item-id="${item.id}"
-              placeholder="Qty"
             />
             <button 
               type="button" 
-              class="btn-qty-plus w-8 h-8 rounded-lg glass-chip-btn flex items-center justify-center font-bold text-base text-on-surface hover:text-primary active:scale-95 transition-all select-none" 
+              class="btn-qty-plus w-9 h-full flex items-center justify-center text-on-surface hover:text-primary hover:bg-white/10 active:scale-90 transition-all font-bold text-base select-none shrink-0" 
               data-item-id="${item.id}"
               title="Tambah 1 Pasang"
             >+</button>
           </div>
-          <div class="stock-status-helper text-[10px] text-on-surface-variant mt-1 leading-tight flex items-center gap-1" data-item-id="${item.id}">
-            <span class="text-on-surface-variant/70">Bebas diisi sesuai stok</span>
+
+          <div class="stock-status-helper text-[10px] text-on-surface-variant mt-1.5 leading-tight truncate min-h-[15px]" data-item-id="${item.id}">
+            <span class="text-on-surface-variant/70">Bebas diisi (min 1)</span>
           </div>
         </div>
 
-        <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl">
-          <label class="font-label-sm text-[11px] text-on-surface-variant font-semibold">Harga Beli / Pasang</label>
-          <div class="relative mt-1">
-            <span class="absolute left-2.5 top-2 text-xs text-on-surface-variant font-bold">Rp</span>
+        <!-- Kotak Harga Beli / Pasang -->
+        <div class="flex flex-col justify-between glass-panel p-2.5 rounded-xl border border-white/10">
+          <div class="flex items-center justify-between min-h-[16px]">
+            <label class="font-label-sm text-[11px] text-on-surface-variant font-semibold truncate">Harga Beli / Psg</label>
+          </div>
+
+          <div class="relative flex items-center rounded-xl glass-input overflow-hidden h-9 mt-1.5 border border-white/20">
+            <span class="absolute left-2.5 text-xs text-on-surface-variant font-bold pointer-events-none">Rp</span>
             <input 
               type="text" 
-              class="input-harga-beli w-full pl-7 pr-2.5 py-1.5 rounded-lg glass-input text-on-surface font-bold text-sm font-tabular focus:outline-none focus:ring-2 focus:ring-on-tertiary-container"
+              class="input-harga-beli w-full h-full pl-8 pr-2.5 bg-transparent border-0 text-on-surface font-bold text-xs font-tabular focus:outline-none p-0"
               value="${priceVal}"
               data-item-id="${item.id}"
             />
           </div>
-          <div class="subtotal-item-helper text-[10px] text-on-surface-variant mt-1 text-right font-medium" data-item-id="${item.id}">
+
+          <div class="subtotal-item-helper text-[10px] text-on-surface-variant mt-1.5 text-right font-medium truncate min-h-[15px]" data-item-id="${item.id}">
             Subtotal: <strong class="text-primary font-tabular">Rp ${formatRupiah((item.qty || 1) * (item.buyPrice || 185000), '')}</strong>
           </div>
         </div>
@@ -880,7 +887,7 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
       const cleanBc = (item.barcode || '').trim().toUpperCase();
       if (!cleanBc) {
         if (tagEl) tagEl.textContent = '';
-        if (helperEl) helperEl.innerHTML = `<span class="text-on-surface-variant/70">Bebas diisi sesuai stok belanja</span>`;
+        if (helperEl) helperEl.innerHTML = `<span class="text-on-surface-variant/70">Bebas diisi (min 1)</span>`;
         return;
       }
 
@@ -888,17 +895,17 @@ export function initTambahBarangMasukPage(router, store, params = {}) {
       if (info && (info.product || info.stockItem)) {
         const sisa = info.sisaStock;
         if (tagEl) {
-          tagEl.innerHTML = `<span class="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">Stok: ${sisa} psg</span>`;
+          tagEl.innerHTML = `<span class="px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-400 font-bold text-[9px]">Stok: ${sisa}</span>`;
         }
         if (helperEl) {
-          helperEl.innerHTML = `<span class="text-emerald-400 font-medium">✓ Sisa di toko: <b>${sisa} psg</b> (+<b>${qty} psg</b> baru = <b>${sisa + qty} psg</b>)</span>`;
+          helperEl.innerHTML = `<span class="text-emerald-400 font-medium truncate">Sisa ${sisa} (+<b>${qty}</b> = ${sisa + qty} psg)</span>`;
         }
       } else {
         if (tagEl) {
-          tagEl.innerHTML = `<span class="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-bold text-[10px]">Baru</span>`;
+          tagEl.innerHTML = `<span class="px-1.5 py-0.2 rounded-md bg-primary/10 text-primary font-bold text-[9px]">Baru</span>`;
         }
         if (helperEl) {
-          helperEl.innerHTML = `<span class="text-primary font-medium">★ Barang baru masuk: <b>${qty} pasang</b></span>`;
+          helperEl.innerHTML = `<span class="text-primary font-medium truncate">Baru: +<b>${qty}</b> psg</span>`;
         }
       }
     }
