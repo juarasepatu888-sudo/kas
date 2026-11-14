@@ -577,3 +577,26 @@ Sebelumnya, pada formulir Belanja / Tambah Barang Masuk (`src/pages/tambah-baran
 4. **Sinkronisasi Multi-Qty pada Penjualan (Halaman Transaksi):**
    - Pada `src/pages/tambah-transaksi.js`, sistem kini mengizinkan penjualan lebih dari 1 pasang untuk barcode yang sama jika stoknya memang tersedia (`sisaStock >= jumlah di form penjualan`).
    - Popup pencarian stok (`populateStockDropdown`) menghitung jumlah pemakaian barcode di form dan hanya menyaring keluar item jika seluruh sisa stoknya sudah terpilih.
+
+## 11. Fitur Quantity (Jumlah Pasang) pada Formulir Penjualan / Tambah Transaksi (14 November 2026)
+
+### Latar Belakang & Kebutuhan
+Sebelumnya, pada formulir Tambah Transaksi (Penjualan / Kas Masuk), setiap baris kartu sepatu hanya menginput Harga Jual dan mengasumsikan 1 pasang per baris. Ketika pembeli membeli beberapa pasang sekaligus untuk model/barcode yang sama (misal beli 2 atau 3 pasang), kasir harus menambahkan kartu baru berulang kali.
+
+### Perubahan & Fitur Baru yang Diterapkan:
+1. **Fitur Stepper Qty pada Setiap Kartu Sepatu Terjual:**
+   - Menambahkan kotak **Jumlah Pasang (Qty)** berdampingan secara simetris dengan **Harga Jual / Psg**.
+   - Dilengkapi tombol minus `−`, input angka langsung, dan tombol plus `+`.
+   - Menampilkan subtotal otomatis (`Qty × Harga Jual`) per baris sepatu.
+   - Menampilkan badge status stok real-time: jika barcode dipilih, sistem menampilkan sisa stok yang ada di toko dan memperingatkan jika Qty yang diinput melebihi stok yang tersedia.
+
+2. **Perhitungan Akumulatif & Ringkasan Total Penjualan:**
+   - Total nominal transaksi dihitung dari `Σ (Harga Jual × Qty)`.
+   - Total pasang sepatu dihitung dari `Σ (Qty)`.
+   - Ringkasan header & badge ("X pasang") mencerminkan total fisik pasang sepatu yang terjual.
+   - Judul transaksi otomatis mencantumkan rincian pasang, misal: `2x Ventela Public Low`.
+
+3. **Sinkronisasi Pemotongan Stok & Laporan:**
+   - `store.getRealtimeStockReport()` kini mengakumulasikan `it.qty` dari setiap item transaksi saat menghitung `soldCountByBarcode` dan `soldCountByName`.
+   - Laporan investor & pembagian hasil modal mengalikan omzet dan HPP dengan `it.qty`.
+   - Validasi transaksi mencegah penjualan jika total Qty barcode yang dimasukkan di formulir melampaui sisa stok di toko.

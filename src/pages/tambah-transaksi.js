@@ -705,15 +705,21 @@ export function initTambahTransaksiPage(router, store, params = {}) {
     }
     if (!item) return;
 
+    const cEl = document.querySelector(`.sale-item-card[data-sale-item-id="${itemId}"]`);
+
     if (!barcode) {
       item.barcode = ''; item.name = ''; item.kondisi = 'Bagus'; item.price = 0; item.photo = null;
-      syncItemNameRow(itemId, item); recalcTotal(); return;
+      syncItemNameRow(itemId, item);
+      if (cEl) updateSaleStockDisplay(cEl, item);
+      recalcTotal();
+      return;
     }
 
     // Jika terjadi konflik duplikat, jangan proses auto-fill produk
     const conflict = findSaleBarcodeConflict(barcode, itemId);
     if (conflict) {
       item.barcode = barcode.trim();
+      if (cEl) updateSaleStockDisplay(cEl, item);
       return;
     }
 
@@ -730,10 +736,12 @@ export function initTambahTransaksiPage(router, store, params = {}) {
         priceInput.value = formatRupiah(finalPrice, '');
       }
       syncItemNameRow(itemId, item); 
+      if (cEl) updateSaleStockDisplay(cEl, item);
       recalcTotal();
       showToast('Sepatu terdeteksi: ' + prod.name, 'success', 2500);
     } else {
       item.barcode = barcode;
+      if (cEl) updateSaleStockDisplay(cEl, item);
       recalcTotal();
       showToast('Barcode siap. Masukkan harga jual.', 'info');
     }
@@ -951,9 +959,122 @@ export function initTambahTransaksiPage(router, store, params = {}) {
       }
     });
 
+    function updateSaleStockDisplay(cardEl, item) {
+      if (!cardEl || !item) return;
+      const tagEl = cardEl.querySelector('.sale-stock-tag');
+      const helperEl = cardEl.querySelector('.sale-stock-helper');
+      const subtotalEl = cardEl.querySelector('.sale-subtotal-helper');
+
+      const qty = Math.max(1, parseInt(item.qty) || 1);
+      const price = Number(item.price) || 0;
+      if (subtotalEl) {
+        subtotalEl.innerHTML = `Subtotal: <strong class="text-primary font-tabular">Rp ${formatRupiah(qty * price, '')}</strong>`;
+      }
+
+      const clean = (item.barcode || '').trim().toUpperCase();
+      if (!clean) {
+        if (tagEl) tagEl.textContent = '';
+        if (helperEl) helperEl.innerHTML = `<span class="text-on-surface-variant/70">Min 1 psg</span>`;
+        return;
+      }
+
+      const stockReport = store.getRealtimeStockReport ? store.getRealtimeStockReport({ excludeTrxId: isEditMode ? editId : null }) : { unsoldItems: [] };
+      const stockItem = (stockReport.unsoldItems || []).find((si) => si.hasRealBarcode && si.barcode && si.barcode.toString().trim().toUpperCase() === clean);
+
+      if (stockItem) {
+        const maxStock = stockItem.sisaStock !== undefined ? stockItem.sisaStock : 1;
+        if (tagEl) tagEl.innerHTML = `<span class="px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[9px]">Stok: ${maxStock}</span>`;
+        if (helperEl) {
+          if (qty > maxStock) {
+            helperEl.innerHTML = `<span class="text-rose-400 font-bold truncate">Melebihi stok (${maxStock} psg)!</span>`;
+          } else {
+            helperEl.innerHTML = `<span class="text-emerald-400 font-medium truncate">Tersedia ${maxStock} psg</span>`;
+          }
+        }
+      } else {
+        if (tagEl) tagEl.textContent = '';
+        if (helperEl) helperEl.innerHTML = `<span class="text-on-surface-variant/70">Min 1 psg</span>`;
+      }
+    }
+
+    // Qty Controls (Minus, Plus, & Input Angka)
+    document.querySelectorAll('.sale-item-card').forEach((cardEl) => {
+      const itemId = cardEl.getAttribute('data-sale-item-id');
+      let item = saleItems.find((it) => it.id === itemId);
+      if (!item && saleItems.length === 1) item = saleItems[0];
+      if (item) updateSaleStockDisplay(cardEl, item);
+    });
+
+    document.querySelectorAll('.btn-sale-qty-minus').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.getAttribute('data-sale-item-id');
+        const cardEl = document.querySelector(`.sale-item-card[data-sale-item-id="${itemId}"]`);
+        let item = saleItems.find((it) => it.id === itemId);
+        if (item) {
+          const curQty = Math.max(1, parseInt(item.qty) || 1);
+          if (curQty > 1) {
+            item.qty = curQty - 1;
+            const qInput = cardEl ? cardEl.querySelector('.sale-item-qty') : null;
+            if (qInput) qInput.value = item.qty;
+            updateSaleStockDisplay(cardEl, item);
+            recalcTotal();
+            validateSaleBarcodeField(item.id, item.barcode);
+          }
+        }
+      });
+    });
+
+    document.querySelectorAll('.btn-sale-qty-plus').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.getAttribute('data-sale-item-id');
+        const cardEl = document.querySelector(`.sale-item-card[data-sale-item-id="${itemId}"]`);
+        let item = saleItems.find((it) => it.id === itemId);
+        if (item) {
+          const curQty = Math.max(1, parseInt(item.qty) || 1);
+          item.qty = curQty + 1;
+          const qInput = cardEl ? cardEl.querySelector('.sale-item-qty') : null;
+          if (qInput) qInput.value = item.qty;
+          updateSaleStockDisplay(cardEl, item);
+          recalcTotal();
+          validateSaleBarcodeField(item.id, item.barcode);
+        }
+      });
+    });
+
+    document.querySelectorAll('.sale-item-qty').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        const itemId = input.getAttribute('data-sale-item-id');
+        const cardEl = document.querySelector(`.sale-item-card[data-sale-item-id="${itemId}"]`);
+        let item = saleItems.find((it) => it.id === itemId);
+        const val = parseInt(e.target.value);
+        if (item && !isNaN(val) && val >= 1) {
+          item.qty = val;
+          updateSaleStockDisplay(cardEl, item);
+          recalcTotal();
+          validateSaleBarcodeField(item.id, item.barcode);
+        }
+      });
+
+      input.addEventListener('blur', (e) => {
+        const itemId = input.getAttribute('data-sale-item-id');
+        const cardEl = document.querySelector(`.sale-item-card[data-sale-item-id="${itemId}"]`);
+        let item = saleItems.find((it) => it.id === itemId);
+        const val = parseInt(e.target.value);
+        const finalVal = isNaN(val) || val < 1 ? 1 : val;
+        if (item) {
+          item.qty = finalVal;
+          input.value = finalVal;
+          updateSaleStockDisplay(cardEl, item);
+          recalcTotal();
+          validateSaleBarcodeField(item.id, item.barcode);
+        }
+      });
+    });
+
     document.querySelectorAll('.sale-item-price').forEach((input) => {
       input.addEventListener('input', (e) => {
         const itemId = input.getAttribute('data-sale-item-id');
+        const cardEl = document.querySelector(`.sale-item-card[data-sale-item-id="${itemId}"]`);
         const raw = parseRupiah(e.target.value);
         input.value = raw > 0 ? formatRupiah(raw, '') : '';
         let item = saleItems.find((it) => it.id === itemId);
@@ -966,6 +1087,7 @@ export function initTambahTransaksiPage(router, store, params = {}) {
           item = saleItems.find((it) => it.id === itemId);
         }
         if (item) item.price = raw;
+        updateSaleStockDisplay(cardEl, item);
         recalcTotal();
       });
     });
@@ -1496,14 +1618,15 @@ export function initTambahTransaksiPage(router, store, params = {}) {
         const noteVal = (document.getElementById('input-notes') && document.getElementById('input-notes').value.trim()) || '';
         const ongkirRadio = document.querySelector('input[name="ongkirOption"]:checked');
         const ongkirVal = ongkirRadio ? ongkirRadio.value : 'FO';
-        const totalAmount = validItems.reduce((s, it) => s + (Number(it.price) || 0), 0);
-        const itemNames = validItems.filter((it) => it.name).map((it) => it.name);
+        const totalAmount = validItems.reduce((s, it) => s + ((Number(it.price) || 0) * (Number(it.qty) || 1)), 0);
+        const totalCount = validItems.reduce((s, it) => s + (Number(it.qty) || 1), 0);
+        const itemNamesWithQty = validItems.filter((it) => it.name).map((it) => (it.qty > 1 ? `${it.qty}x ${it.name}` : it.name));
         let title = '';
-        if (buyerName && itemNames.length > 0) title = buyerName + ' \u2022 ' + itemNames.join(', ');
+        if (buyerName && itemNamesWithQty.length > 0) title = buyerName + ' \u2022 ' + itemNamesWithQty.join(', ');
         else if (buyerName) title = 'Penjualan ke ' + buyerName;
-        else if (itemNames.length > 0) title = itemNames.join(', ');
+        else if (itemNamesWithQty.length > 0) title = itemNamesWithQty.join(', ');
         else if (noteVal) title = noteVal;
-        else title = 'Penjualan ' + validItems.length + ' Pasang Sepatu';
+        else title = 'Penjualan ' + totalCount + ' Pasang Sepatu';
         const primaryBarcode = (validItems.find((it) => it.barcode) || {}).barcode || null;
         const primaryProduct = validItems.find((it) => it.name);
         const trxData = {
@@ -1524,16 +1647,17 @@ export function initTambahTransaksiPage(router, store, params = {}) {
             name: it.name || null,
             kondisi: it.kondisi || 'Bagus',
             price: Number(it.price) || 0,
+            qty: Math.max(1, parseInt(it.qty) || 1),
             photo: it.photo || null
           })),
-          itemCount: validItems.length
+          itemCount: totalCount
         };
         if (isEditMode) {
           store.updateTransaction(editId, trxData);
           showToast('Perubahan penjualan berhasil disimpan!', 'success');
         } else {
           store.addTransaction(trxData);
-          showToast('Penjualan ' + validItems.length + ' pasang disimpan!', 'success');
+          showToast('Penjualan ' + totalCount + ' pasang disimpan!', 'success');
         }
       } else {
         const amount = parseRupiah(inputNominal ? inputNominal.value : '0');

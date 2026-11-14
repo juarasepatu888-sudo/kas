@@ -1342,13 +1342,14 @@ class Store {
 
       if (t.items && Array.isArray(t.items) && t.items.length > 0) {
         t.items.forEach((it) => {
+          const itemQty = Math.max(1, Number(it.qty) || 1);
           if (it.barcode) {
             const bc = it.barcode.toString().trim().toUpperCase();
-            soldCountByBarcode.set(bc, (soldCountByBarcode.get(bc) || 0) + 1);
+            soldCountByBarcode.set(bc, (soldCountByBarcode.get(bc) || 0) + itemQty);
           }
           const nm = (it.name || '').toString().trim().toLowerCase();
           if (nm) {
-            soldCountByName.set(nm, (soldCountByName.get(nm) || 0) + 1);
+            soldCountByName.set(nm, (soldCountByName.get(nm) || 0) + itemQty);
           }
         });
       } else {
@@ -2491,9 +2492,10 @@ class Store {
               (nm && sessionProductNames.has(nm));
 
             if (isMatch) {
-              totalTerjualPasang += 1;
+              const itemQ = Math.max(1, Number(it.qty) || 1);
+              totalTerjualPasang += itemQ;
               const sellP = Number(it.price) || 0;
-              omzetPenjualan += sellP;
+              omzetPenjualan += (sellP * itemQ);
               // Cari buyPrice dari supply atau fallback
               let buyP = 0;
               for (const sup of matchedSupplies) {
@@ -2501,7 +2503,7 @@ class Store {
                 if (found && found.buyPrice) { buyP = Number(found.buyPrice); break; }
               }
               if (!buyP && sellP > 0) buyP = Math.round(sellP / 1.35);
-              hppTerjual += buyP;
+              hppTerjual += (buyP * itemQ);
             }
           });
         } else {
